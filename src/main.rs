@@ -20,6 +20,9 @@ impl IsHidden for DirEntry {
 }
 
 pub trait ModeChar {
+    const DASH: char = '-';
+    //const DASH: char = '─';
+
     fn mode_char(&self, mode: char) -> char;
     fn mode_char_color(&self, mode: char, style: Style) -> String;
 }
@@ -27,7 +30,7 @@ pub trait ModeChar {
 impl ModeChar for bool {
     #[inline]
     fn mode_char(&self, mode: char) -> char {
-        if *self { mode } else { '─' }
+        if *self { mode } else { Self::DASH }
     } 
 
     fn mode_char_color(&self, mode: char, style: Style) -> String 
@@ -35,7 +38,7 @@ impl ModeChar for bool {
         if *self {
             mode.style(style).to_string()
         } else {
-            '─'.style(Style::default().fg::<Gray>().dimmed()).to_string()
+            Self::DASH.style(Style::default().dimmed()).to_string()
         }
     }
 }
@@ -116,7 +119,17 @@ impl Colorize for Path {
         if self.is_dir() {
             name.blue().to_string()
         } else {
-            name.to_string()
+            let extension = self.extension().map(|v| v.to_str().unwrap_or(""));
+            if let Some(extension) = extension {
+                // TODO: Change this to some sort of map that resolves the extension to a styling
+                let style = match extension.to_lowercase().as_str() {
+                    "png" | "gif" | "jpg" | "jpeg" => Style::default().purple(),
+                    _ => Style::default()
+                };
+                name.style(style).to_string()
+            } else {
+                name.to_string()
+            }
         }
     }
 }
