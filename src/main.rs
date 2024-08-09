@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use owo_colors::{colors::xterm::Gray, OwoColorize, Style};
-use xf::{filter::Extensions, permission::{ModeChar, Perms}, sort::{Directory, Extension, Hidden}, Entry, XF};
+use xf::{filter::{Extensions, Filter, Match}, permission::{ModeChar, Perms}, sort::{Extension, Group}, Directory, Hidden, Entry, XF};
 
 pub trait Colorize {
     fn colorize(&self) -> String;
@@ -57,11 +57,10 @@ fn main() {
         )
         .get_matches();
 
-    let xf = XF::new(
-        matches.get_one::<String>("path").cloned().unwrap_or(".".to_string()),
-        Directory::<Hidden<Extension>>::default(),
-        Extensions(vec!["toml".to_string(), "".to_string()])
-    );
+    let path = matches.get_one::<String>("path").cloned().unwrap_or(".".to_string());
+
+    let xf = XF::from(path)
+        .with_filter(());
 
     println!("{}     {}", "Mode".underline(), "Name".underline());
     for entry in xf.iter().unwrap() {

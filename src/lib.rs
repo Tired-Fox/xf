@@ -2,9 +2,9 @@ pub mod sort;
 pub mod filter;
 pub mod permission;
 
-use std::{ffi::OsString, fs::{self, DirEntry}, io, path::{Path, PathBuf}};
+use std::{cmp::Ordering, ffi::OsString, fs::{self, DirEntry}, io, marker::PhantomData, path::{Path, PathBuf}};
 
-use filter::Filter;
+use filter::{Filter, Not};
 use sort::{Natural, SortStrategy};
 
 /// Wrapper around [`std::fs::DirEntry`]
@@ -85,13 +85,13 @@ impl<A: AsRef<str>> NormalizeCanonicalize for A {
 }
 
 /// Main logic for transforming, sorting, and filtering file entries
-pub struct XF {
+pub struct XF<S = Directory, F = Not<Hidden>> {
     path: PathBuf,
-    sorters: Box<dyn SortStrategy>,
-    filters: Box<dyn Filter>,
+    filters: F,
+    _marker: PhantomData<fn() -> S>
 }
 
-impl std::fmt::Debug for XF {
+impl<S, F> std::fmt::Debug for XF<S, F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("XF")
             .field("path", &self.path)
@@ -104,22 +104,53 @@ impl Default for XF {
         let path = std::env::current_dir().unwrap().display().to_string();
         Self {
             path: path.normalize_and_canonicalize().expect("Could not find the path specified"),
-            sorters: Box::new(Natural),
-            filters: Box::new(())
+            filters: Not::<Hidden>::default(),
+            _marker: Default::default()
         }
     }
 }
 
 impl XF {
-    pub fn new<P: AsRef<Path>, T: SortStrategy + 'static, F: Filter + 'static>(path: P, sorters: T, filters: F) -> Self {
+    pub fn new<P: AsRef<Path>, F>(path: P, filters: F) -> XF<Directory, F> {
         let path = path.as_ref().display().to_string();
-        Self {
+        XF {
             path:  path.normalize_and_canonicalize().expect("Could not find the path specified"),
-            sorters: Box::new(sorters),
-            filters: Box::new(filters),
+            filters,
+            _marker: Default::default()
+        }
+    }
+}
+
+impl<S, F> XF<S, F> {
+    pub fn with_sorter<S2: Default>(self) -> XF<S2, F> {
+        XF {
+            path: self.path,
+            filters: self.filters,
+            _marker: Default::default()
         }
     }
 
+    pub fn with_filter<F2>(self, filters: F2) -> XF<S, F2> {
+        XF {
+            path: self.path,
+            filters,
+            _marker: Default::default()
+        }
+    }
+}
+
+impl<P: AsRef<Path>> From<P> for XF {
+    fn from(value: P) -> Self {
+        let value = value.as_ref().display().to_string();
+        XF {
+            path:  value.normalize_and_canonicalize().expect("Could not find the path specified"),
+            filters: Not::<Hidden>::default(),
+            _marker: Default::default()
+        }
+    }
+}
+
+impl<S: SortStrategy, F: Filter> XF<S, F> {
     pub fn iter(&self) -> io::Result<XFIter> {
         let mut entries = fs::read_dir(&self.path)?
             .filter_map(|v| match v {
@@ -131,7 +162,7 @@ impl XF {
             })
             .collect::<Vec<_>>();
 
-        entries.sort_by(|f, s| self.sorters.compare(f, s));
+        entries.sort_by(|f, s| S::compare(f, s));
 
         Ok(XFIter(entries))
     }
@@ -148,3 +179,57 @@ impl Iterator for XFIter {
     }
 }
 
+
+/// A sorter that will sort directories first
+#[derive(Default)]
+pub struct Directory<T = Natural>(PhantomData<T>);
+impl<T: SortStrategy> SortStrategy for Directory<T> {
+    fn compare(first: &Entry, second: &Entry) -> Ordering {
+        match (first, second) {
+            (Entry::Dir(_), Entry::File(_)) => Ordering::Greater,
+            (Entry::File(_), Entry::Dir(_)) => Ordering::Less,
+            _ => {
+                T::compare(first, second)
+            }
+        }
+    }
+}
+impl Filter for Directory {
+    type Not = Not<Self>;
+    fn keep(&self, entry: &Entry) -> bool {
+        entry.is_dir()
+    }
+
+    fn not(self) -> Self::Not {
+       Not::new(self) 
+    }
+}
+
+/// A sorter that will sort hidden files first
+#[derive(Default)]
+pub struct Hidden<T = Natural>(PhantomData<T>);
+impl<T: PartialEq> PartialEq for Hidden<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+impl<T: SortStrategy> SortStrategy for Hidden<T> {
+    fn compare(first: &Entry, second: &Entry) -> Ordering {
+        match (first.as_entry().is_hidden(), second.as_entry().is_hidden()) {
+            (true, false) => Ordering::Greater,
+            (false, true) => Ordering::Less,
+            _ => T::compare(first, second)
+        }
+    }
+}
+impl Filter for Hidden {
+    type Not = Not<Self>;
+
+    fn keep(&self, entry: &Entry) -> bool {
+        entry.as_entry().is_hidden()
+    }
+
+    fn not(self) -> Self::Not {
+        Not::new(self)
+    }
+}
