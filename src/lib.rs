@@ -1,47 +1,103 @@
+pub mod format;
 pub mod sort;
 pub mod filter;
 pub mod permission;
 
-use std::{cmp::Ordering, ffi::OsString, fs::{self, DirEntry}, io, marker::PhantomData, path::{Path, PathBuf}};
+use std::{cmp::Ordering, fs::{self, DirEntry, Metadata}, io, path::{Path, PathBuf}};
 
 use filter::{Filter, Not};
+use permission::Perms;
 use sort::{Natural, SortStrategy};
 
 /// Wrapper around [`std::fs::DirEntry`]
 ///
 /// Predetermines if it is a file or a directory along with providing helpers
 /// around manipulating the entries.
-#[derive(Debug, strum_macros::EnumIs, strum_macros::AsRefStr)]
-pub enum Entry {
-    File(DirEntry),
-    Dir(DirEntry),
+#[derive(Debug, Clone)]
+pub struct Entry {
+    entry_type: EntryType,
+    permissions: Perms,
+    meta: Metadata,
+    path: PathBuf,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, strum_macros::EnumIs)]
+pub enum EntryType {
+    File,
+    Dir,
 }
 
 impl Entry {
-    pub fn as_entry(&self) -> &DirEntry {
-        match self {
-            Self::File(entry) => entry,
-            Self::Dir(entry) => entry
-        }
+    pub fn etype(&self) -> EntryType {
+        self.entry_type
     }
 
-    pub fn file_name(&self) -> OsString {
-        self.as_entry().file_name()
+    pub fn permissions(&self) -> &Perms {
+        &self.permissions
+    }
+
+    pub fn metadata(&self) -> &Metadata {
+        &self.meta
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn file_name(&self) -> &str {
+        self.path().file_name().and_then(|v| v.to_str()).unwrap_or("")
     }
 
     pub fn extension(&self) -> Option<String> {
-        self.as_entry()
-            .path()
+        self.path()
             .extension()
             .and_then(|v| v.to_str().map(ToString::to_string))
+    }
+
+    pub fn is_dir(&self) -> bool {
+        self.entry_type == EntryType::Dir
+    }
+
+    pub fn is_file(&self) -> bool {
+        self.entry_type == EntryType::File
+    }
+
+    pub fn is_hidden(&self) -> bool {
+        self.file_name().starts_with('.')
+    }
+
+    pub fn is_dot(&self) -> bool {
+        self.file_name().starts_with(".")
+    }
+}
+
+impl Entry {
+    pub fn iter<F: Filter, S: SortStrategy>(&self, parent: &FileSystem<S, F>) -> io::Result<XFIter> {
+        if !self.is_dir() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Entry is not a directory"));
+        }
+
+        let mut entries = fs::read_dir(&self.path)?
+            .filter_map(|v| match v {
+                Ok(v) => {
+                    let entry = Entry::from(v);
+                    parent.filters.keep(&entry).then_some(entry)
+                },
+                _ => None
+            })
+            .collect::<Vec<_>>();
+
+        entries.sort_by(|f, s| parent.sorter.compare(f, s));
+
+        Ok(XFIter(entries))
     }
 }
 
 impl PartialEq for Entry {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::File(s), Self::File(o)) => s.path() == o.path(),
-            (Self::Dir(s), Self::Dir(o)) => s.path() == o.path(),
+        match (self.entry_type, other.entry_type) {
+            (EntryType::File, EntryType::File) => self.path() == other.path(),
+            (EntryType::Dir, EntryType::Dir) => self.path() == other.path(),
             _ => false
         }
     }
@@ -50,22 +106,18 @@ impl Eq for Entry {}
 
 impl From<DirEntry> for Entry {
     fn from(value: DirEntry) -> Self {
-        if value.path().is_dir() {
-            Self::Dir(value)
+        let entry_type = if value.path().is_dir() {
+            EntryType::Dir
         } else {
-            Self::File(value)
+            EntryType::File
+        };
+
+        Self {
+            entry_type,
+            permissions: Perms::from(&value),
+            meta: value.metadata().unwrap(),
+            path: value.path().to_path_buf(),
         }
-    }
-}
-
-/// Helper to check if the path is hidden
-pub(crate) trait IsHidden {
-    fn is_hidden(&self) -> bool;
-}
-
-impl IsHidden for DirEntry {
-    fn is_hidden(&self) -> bool {
-        self.path().file_name().and_then(|v| v.to_str().map(|v| v.starts_with("."))).unwrap_or_default()
     }
 }
 
@@ -77,7 +129,7 @@ trait NormalizeCanonicalize {
 impl<A: AsRef<str>> NormalizeCanonicalize for A {
     fn normalize_and_canonicalize(&self) -> Result<PathBuf, std::io::Error> {
         let mut path = self.as_ref().to_string();
-        if path.starts_with("~") {
+        if path.starts_with('~') {
             path.replace_range(..1, dirs::home_dir().unwrap().display().to_string().as_str());
         }
         dunce::canonicalize(path)
@@ -85,13 +137,13 @@ impl<A: AsRef<str>> NormalizeCanonicalize for A {
 }
 
 /// Main logic for transforming, sorting, and filtering file entries
-pub struct XF<S = Directory, F = Not<Hidden>> {
+pub struct FileSystem<S = Directory, F = Not<Hidden>> {
     path: PathBuf,
     filters: F,
-    _marker: PhantomData<fn() -> S>
+    sorter: S,
 }
 
-impl<S, F> std::fmt::Debug for XF<S, F> {
+impl<S, F> std::fmt::Debug for FileSystem<S, F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("XF")
             .field("path", &self.path)
@@ -99,58 +151,58 @@ impl<S, F> std::fmt::Debug for XF<S, F> {
     } 
 }
 
-impl Default for XF {
+impl Default for FileSystem {
     fn default() -> Self {
         let path = std::env::current_dir().unwrap().display().to_string();
         Self {
             path: path.normalize_and_canonicalize().expect("Could not find the path specified"),
             filters: Not::<Hidden>::default(),
-            _marker: Default::default()
+            sorter: Directory::default(),
         }
     }
 }
 
-impl XF {
-    pub fn new<P: AsRef<Path>, F>(path: P, filters: F) -> XF<Directory, F> {
+impl FileSystem {
+    pub fn new<P: AsRef<Path>, S, F>(path: P, sorter: S, filters: F) -> FileSystem<S, F> {
         let path = path.as_ref().display().to_string();
-        XF {
+        FileSystem {
             path:  path.normalize_and_canonicalize().expect("Could not find the path specified"),
             filters,
-            _marker: Default::default()
+            sorter,
         }
     }
 }
 
-impl<S, F> XF<S, F> {
-    pub fn with_sorter<S2: Default>(self) -> XF<S2, F> {
-        XF {
+impl<S, F> FileSystem<S, F> {
+    pub fn with_sorter<S2: Default>(self, sorter: S2) -> FileSystem<S2, F> {
+        FileSystem {
             path: self.path,
             filters: self.filters,
-            _marker: Default::default()
+            sorter,
         }
     }
 
-    pub fn with_filter<F2>(self, filters: F2) -> XF<S, F2> {
-        XF {
+    pub fn with_filter<F2>(self, filters: F2) -> FileSystem<S, F2> {
+        FileSystem {
             path: self.path,
             filters,
-            _marker: Default::default()
+            sorter: self.sorter,
         }
     }
 }
 
-impl<P: AsRef<Path>> From<P> for XF {
+impl<P: AsRef<Path>> From<P> for FileSystem {
     fn from(value: P) -> Self {
         let value = value.as_ref().display().to_string();
-        XF {
+        FileSystem {
             path:  value.normalize_and_canonicalize().expect("Could not find the path specified"),
             filters: Not::<Hidden>::default(),
-            _marker: Default::default()
+            sorter: Directory::default(),
         }
     }
 }
 
-impl<S: SortStrategy, F: Filter> XF<S, F> {
+impl<S: SortStrategy, F: Filter> FileSystem<S, F> {
     pub fn iter(&self) -> io::Result<XFIter> {
         let mut entries = fs::read_dir(&self.path)?
             .filter_map(|v| match v {
@@ -162,7 +214,7 @@ impl<S: SortStrategy, F: Filter> XF<S, F> {
             })
             .collect::<Vec<_>>();
 
-        entries.sort_by(|f, s| S::compare(f, s));
+        entries.sort_by(|f, s| self.sorter.compare(f, s));
 
         Ok(XFIter(entries))
     }
@@ -181,15 +233,19 @@ impl Iterator for XFIter {
 
 
 /// A sorter that will sort directories first
-#[derive(Default)]
-pub struct Directory<T = Natural>(PhantomData<T>);
+pub struct Directory<T = Natural>(T);
+impl<T: Default> Default for Directory<T> {
+    fn default() -> Self {
+        Self(T::default())
+    }
+}
 impl<T: SortStrategy> SortStrategy for Directory<T> {
-    fn compare(first: &Entry, second: &Entry) -> Ordering {
-        match (first, second) {
-            (Entry::Dir(_), Entry::File(_)) => Ordering::Greater,
-            (Entry::File(_), Entry::Dir(_)) => Ordering::Less,
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
+        match (first.entry_type, second.entry_type) {
+            (EntryType::Dir, EntryType::File) => Ordering::Greater,
+            (EntryType::File, EntryType::Dir) => Ordering::Less,
             _ => {
-                T::compare(first, second)
+                self.0.compare(first, second)
             }
         }
     }
@@ -206,19 +262,23 @@ impl Filter for Directory {
 }
 
 /// A sorter that will sort hidden files first
-#[derive(Default)]
-pub struct Hidden<T = Natural>(PhantomData<T>);
+pub struct Hidden<T = Natural>(T);
+impl<T: Default> Default for Hidden<T> {
+    fn default() -> Self {
+        Self(T::default())
+    }
+}
 impl<T: PartialEq> PartialEq for Hidden<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0)
     }
 }
 impl<T: SortStrategy> SortStrategy for Hidden<T> {
-    fn compare(first: &Entry, second: &Entry) -> Ordering {
-        match (first.as_entry().is_hidden(), second.as_entry().is_hidden()) {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
+        match (first.is_hidden(), second.is_hidden()) {
             (true, false) => Ordering::Greater,
             (false, true) => Ordering::Less,
-            _ => T::compare(first, second)
+            _ => self.0.compare(first, second)
         }
     }
 }
@@ -226,7 +286,7 @@ impl Filter for Hidden {
     type Not = Not<Self>;
 
     fn keep(&self, entry: &Entry) -> bool {
-        entry.as_entry().is_hidden()
+        entry.is_hidden()
     }
 
     fn not(self) -> Self::Not {

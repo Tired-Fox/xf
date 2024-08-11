@@ -1,6 +1,6 @@
-use std::{cmp::Ordering, marker::PhantomData};
+use std::cmp::Ordering;
 
-use crate::{Directory, Entry, Hidden, IsHidden};
+use crate::{Directory, Entry, Hidden};
 
 /// Helper to determine state of a char from an iterator
 pub trait IterChar {
@@ -19,15 +19,13 @@ impl IterChar for Option<char> {
 
 /// Implement to allow a struct be a sorter for [`crate::Entry`]
 pub trait SortStrategy {
-    fn compare(first: &Entry, second: &Entry) -> Ordering;
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering;
 }
 
 // Default sorter sorts by comparing file names as strings
 impl SortStrategy for () {
-    fn compare(first: &Entry, second: &Entry) -> Ordering {
-        let first = first.as_entry().path();
-        let second = second.as_entry().path();
-        match first.cmp(&second) {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
+        match first.path().cmp(second.path()) {
             Ordering::Less => Ordering::Greater,
             Ordering::Greater => Ordering::Less,
             other => other
@@ -59,13 +57,11 @@ impl SortStrategy for () {
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct Natural;
 impl SortStrategy for Natural {
-    fn compare(first: &Entry, second: &Entry) -> Ordering {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         // ab102c -> a b 102 c
         // ab20a -> a b 20 a
-        let first = first.file_name().to_string_lossy().to_string();
-        let mut first = first.chars().peekable();
-        let second = second.file_name().to_string_lossy().to_string();
-        let mut second = second.chars().peekable();
+        let mut first = first.file_name().chars().peekable();
+        let mut second = second.file_name().chars().peekable();
 
         while let (Some(_), Some(_)) = (first.peek(), second.peek()) {
             if first.peek().is_ascii_digit() && second.peek().is_ascii_digit() {
@@ -101,13 +97,13 @@ pub trait Matches {
 
 impl<T> Matches for Hidden<T> {
     fn matches(entry: &Entry) -> bool {
-        entry.as_entry().is_hidden()
+        entry.is_hidden()
     }
 }
 
 impl<T> Matches for Directory<T> {
     fn matches(entry: &Entry) -> bool {
-        entry.as_entry().path().is_dir()
+        entry.is_dir()
     }
 }
 
@@ -130,31 +126,35 @@ impl<T> Matches for Extension<T> {
 }
 
 // Sort by file extension
-#[derive(Default)]
-pub struct Extension<T = Natural>(PhantomData<T>);
+pub struct Extension<T = Natural>(T);
+impl<T: Default> Default for Extension<T> {
+    fn default() -> Self {
+        Self(T::default())
+    }
+}
 impl<T: PartialEq> PartialEq for Extension<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0)
     }
 }
 impl<T: SortStrategy> SortStrategy for Extension<T> {
-    fn compare(first: &Entry, second: &Entry) -> Ordering {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         match (first.extension(), second.extension()) {
             (Some(f), Some(s)) => match f.cmp(&s) {
                 Ordering::Less => Ordering::Greater,
                 Ordering::Greater => Ordering::Less,
-                Ordering::Equal => T::compare(first, second)
+                Ordering::Equal => self.0.compare(first, second)
             },
             (None, Some(_)) => Ordering::Greater,
             (Some(_), None) => Ordering::Less,
-            (None, None) => T::compare(first, second)
+            (None, None) => self.0.compare(first, second)
         }
     }
 }
 
 pub trait Grouping<T = ()> {
     fn get_group_index(entry: &Entry) -> Option<usize>;
-    fn compare_within_group(index: usize, first: &Entry, second: &Entry) -> Ordering;
+    fn compare_within_group(&self, index: usize, first: &Entry, second: &Entry) -> Ordering;
 }
 
 impl<T1, T2> Grouping for (T1, T2)
@@ -168,19 +168,23 @@ where
         else { None }
     }
 
-    fn compare_within_group(index: usize, first: &Entry, second: &Entry) -> Ordering {
+    fn compare_within_group(&self, index: usize, first: &Entry, second: &Entry) -> Ordering {
         match index {
-            0 => T1::compare(first, second),
-            1 => T2::compare(first, second),
+            0 => self.0.compare(first, second),
+            1 => self.1.compare(first, second),
             _ => Ordering::Equal
         }
     }
 }
 
-#[derive(Default)]
-pub struct Group<T, D = Natural>(PhantomData<fn () -> (T, D)>);
+pub struct Group<T, D = Natural>(T, D);
+impl<T: Default, D: Default> Default for Group<T, D> {
+    fn default() -> Self {
+        Self(T::default(), D::default())
+    }
+}
 impl<T: Grouping, D: SortStrategy> SortStrategy for Group<T, D> {
-    fn compare(first: &Entry, second: &Entry) -> Ordering {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let f = T::get_group_index(first);
         let s = T::get_group_index(second);
 
@@ -188,11 +192,11 @@ impl<T: Grouping, D: SortStrategy> SortStrategy for Group<T, D> {
             (Some(f), Some(s)) => match f.cmp(&s) {
                 Ordering::Less => Ordering::Greater,
                 Ordering::Greater => Ordering::Less,
-                Ordering::Equal => T::compare_within_group(f, first, second)
+                Ordering::Equal => self.0.compare_within_group(f, first, second)
             },
             (None, Some(_)) => Ordering::Less,
             (Some(_), None) => Ordering::Greater,
-            (None, None) => D::compare(first, second)
+            (None, None) => self.1.compare(first, second)
         }
     }
 }

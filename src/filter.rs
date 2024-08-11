@@ -84,8 +84,7 @@ impl Filter for Match {
     type Not = Not<Self>;
 
     fn keep(&self, entry: &Entry) -> bool {
-        let file_name = entry.file_name().to_string_lossy().to_string();
-        self.0.is_match(file_name.as_str()) 
+        self.0.is_match(entry.file_name()) 
     }
 
     fn not(self) -> Self::Not {

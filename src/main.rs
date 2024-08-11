@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use owo_colors::{colors::xterm::Gray, OwoColorize, Style};
-use xf::{filter::{Extensions, Filter, Match}, permission::{ModeChar, Perms}, sort::{Extension, Group}, Directory, Hidden, Entry, XF};
+use xf::{format::Formatter, permission::{ModeChar, Perms}, FileSystem};
 
 pub trait Colorize {
     fn colorize(&self) -> String;
@@ -58,19 +58,9 @@ fn main() {
         .get_matches();
 
     let path = matches.get_one::<String>("path").cloned().unwrap_or(".".to_string());
-
-    let xf = XF::from(path)
+    let file_system = FileSystem::from(path)
         .with_filter(());
 
-    println!("{}     {}", "Mode".underline(), "Name".underline());
-    for entry in xf.iter().unwrap() {
-        match entry {
-            Entry::File(entry) => {
-                println!("{}   {}", Perms::from(&entry).colorize(), entry.path().colorize());
-            },
-            Entry::Dir(entry) => {
-                println!("{}   {}", Perms::from(&entry).colorize(), entry.path().colorize());
-            }
-        }
-    }
+    xf::format::Grid::new(file_system)
+        .print().unwrap();
 }
