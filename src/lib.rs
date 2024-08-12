@@ -72,23 +72,29 @@ impl Entry {
     }
 
     pub fn is_executable(&self) -> bool {
-        match &self.permissions {
-            Perms::Windows { executable, .. } => *executable,
-            Perms::Unix(_) => unimplemented!(),
-        }
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        return {
+            self.permissions().user().executable()
+                || self.permissions().group().executable()
+                || self.permissions().everyone().executable()
+        };
+
+        #[cfg(target_os = "windows")]
+        return self.permissions().attributes().executable;
     }
 }
 
 impl Entry {
-    pub fn entries<F: Filter, S: SortStrategy>(&self, parent: &FileSystem<S, F>) -> io::Result<Vec<Entry>> {
+    pub fn entries<F: Filter, S: SortStrategy>(&self, parent: &FileSystem<S, F>) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
         if !self.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Entry is not a directory"));
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Entry is not a directory").into());
         }
 
         let mut entries = fs::read_dir(&self.path)?
             .filter_map(|v| match v {
                 Ok(v) => {
-                    let entry = Entry::from(v);
+                    // PERF: Handle error
+                    let entry = Entry::try_from(v).ok()?;
                     parent.filters.keep(&entry).then_some(entry)
                 },
                 _ => None
@@ -112,20 +118,22 @@ impl PartialEq for Entry {
 }
 impl Eq for Entry {}
 
-impl From<DirEntry> for Entry {
-    fn from(value: DirEntry) -> Self {
+impl TryFrom<DirEntry> for Entry {
+    type Error = Box<dyn std::error::Error>;
+    fn try_from(value: DirEntry) -> Result<Self, Self::Error> {
         let entry_type = if value.path().is_dir() {
             EntryType::Dir
         } else {
             EntryType::File
         };
 
-        Self {
+        Ok(Self {
             entry_type,
-            permissions: Perms::from(&value),
+            permissions: Perms::try_from(&value)?,
+            //permissions: Perms::default(),
             meta: value.metadata().unwrap(),
             path: value.path().to_path_buf(),
-        }
+        })
     }
 }
 
@@ -182,7 +190,7 @@ impl FileSystem {
 }
 
 impl<S, F> FileSystem<S, F> {
-    pub fn with_sorter<S2: Default>(self, sorter: S2) -> FileSystem<S2, F> {
+    pub fn with_sorter<S2>(self, sorter: S2) -> FileSystem<S2, F> {
         FileSystem {
             path: self.path,
             filters: self.filters,
@@ -211,11 +219,12 @@ impl<P: AsRef<Path>> From<P> for FileSystem {
 }
 
 impl<S: SortStrategy, F: Filter> FileSystem<S, F> {
-    pub fn entries(&self) -> io::Result<Vec<Entry>> {
+    pub fn entries(&self) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
         let mut entries = fs::read_dir(&self.path)?
             .filter_map(|v| match v {
                 Ok(v) => {
-                    let entry = Entry::from(v);
+                    // PERF: Handle error
+                    let entry = Entry::try_from(v).ok()?;
                     self.filters.keep(&entry).then_some(entry)
                 },
                 _ => None

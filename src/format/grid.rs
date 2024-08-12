@@ -1,7 +1,7 @@
 use owo_colors::OwoColorize;
 use terminal_size::{terminal_size, Width};
 
-use crate::{filter::Filter, sort::SortStrategy, style::Colorizer, FileSystem};
+use crate::{filter::Filter, sort::SortStrategy, style::{Colorizer, Spacer}, FileSystem};
 
 use super::Formatter;
 
@@ -14,7 +14,7 @@ impl<S, F> Grid<S, F> {
 }
 
 impl<S: SortStrategy, F: Filter> Formatter for Grid<S, F> {
-    fn print(&mut self, colorizer: Colorizer) -> std::io::Result<()> {
+    fn print(&mut self, colorizer: Colorizer) -> Result<(), Box<dyn std::error::Error>> {
         let (Width(width), _) = terminal_size().unwrap();
         let width = width as usize;
 
@@ -47,8 +47,8 @@ impl<S: SortStrategy, F: Filter> Formatter for Grid<S, F> {
         println!("{}", entries.chunks(min).map(|vals| {
             vals.iter().enumerate().map(|(i, v)| {
                 format!("{}{}",
-                    v.file_name().style(colorizer.file(v)),
-                    (0..widths[i]-v.file_name().len()).map(|_| ' ').collect::<String>()
+                    colorizer.file(v),
+                    (0..widths[i]-v.file_name().len()).spacer()
                 )
             }).collect::<Vec<_>>().join("  ")
         }).collect::<Vec<_>>().join("\n"));

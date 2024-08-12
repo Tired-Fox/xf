@@ -1,7 +1,10 @@
+use std::{ops::{Range, RangeTo}, os::windows::fs::MetadataExt};
+
+use chrono::Datelike;
 use hashbrown::{HashMap, HashSet};
 use owo_colors::{colors::xterm::Gray, OwoColorize, Style};
 
-use crate::Entry;
+use crate::{permission::AccessRights, Entry};
 
 pub struct GroupStyle {
     matcher_map: HashMap<&'static str, usize>,
@@ -131,21 +134,115 @@ impl Colorizer {
     }
 }
 
+#[inline]
+pub fn humansize(value: u64) -> String {
+    match value {
+        0 => "-".to_string(),
+        // Bytes
+        1..1_024 => value.to_string(),
+        // Kilobytes
+        1_024..1_048_576 => format!("{}K", value / 1_024),
+        // Megabytes
+        1_048_576..1_073_741_824 => format!("{}M", value / 1_048_576),
+        // Gigbytes
+        1_073_741_824..1_099_511_627_776 => format!("{}G", value / 1_099_511_627_776),
+        // Terabytes
+        1_099_511_627_776..1_125_899_906_842_624 => format!("{}T", value / 1_099_511_627_776),
+        // Petabytes
+        _ => format!("{}P", value / 1_125_899_906_842_624)
+    }
+}
+
+pub trait Spacer {
+    fn spacer(self) -> String;
+}
+impl Spacer for Range<usize> {
+    fn spacer(self) -> String {
+        self.map(|_| ' ').collect::<String>()
+    }
+}
+
+/// Helper to create either a dash (`-`) or a char representing the flag
+pub trait ModeChar {
+    const DASH: char = '-';
+    //const DASH: char = '─';
+
+    fn mode_char(&self, mode: char) -> char;
+    fn mode_char_color(&self, mode: char, style: Style) -> String;
+}
+
+impl ModeChar for bool {
+    #[inline]
+    fn mode_char(&self, mode: char) -> char {
+        if *self {
+            mode
+        } else {
+            Self::DASH
+        }
+    }
+
+    fn mode_char_color(&self, mode: char, style: Style) -> String {
+        if *self {
+            mode.style(style).to_string()
+        } else {
+            Self::DASH.style(Style::default().dimmed()).to_string()
+        }
+    }
+}
+
 impl Colorizer {
-    pub fn file(&self, entry: &Entry) -> Style {
+    pub fn file(&self, entry: &Entry) -> String {
+        let mut style = Style::default();
         for m in self.group_styles.iter() {
             if m.matches(entry) {
-                return m.style()
+                style = m.style();
             }
         }
-        Style::default()
+        
+        entry.file_name().style(style).to_string()
     }
 
-    pub fn file_size(&self) -> Style {
-        Style::default().fg::<Gray>()
+    pub fn file_size(&self, entry: &Entry) -> String {
+        if entry.metadata().is_symlink() {
+            format!("   {}", '^'.fg::<Gray>())
+        } else {
+            let hs = humansize(entry.metadata().file_size());
+            format!("{}{}", (0..hs.len()-4).spacer(), hs.fg::<Gray>())
+        }
     }
 
-    pub fn date_modified(&self) -> Style {
-        Style::default().blue()
+    pub fn date_modified(&self, entry: &Entry) -> String {
+        let date = entry.metadata().modified().map(|m| {
+            let date = chrono::DateTime::<chrono::Local>::from(m);
+            if date.year() < chrono::Local::now().year() {
+                date.format("%e %b  %Y")
+            } else {
+                date.format("%e %b %H:%M")
+            }.to_string()
+        }).unwrap_or("-".to_string());
+
+        format!("{}{}", (0..12usize.saturating_sub(date.len())).spacer(), date.blue())
+    }
+
+    fn access_rights(&self, buffer: &mut String, rights: &AccessRights) {
+        buffer.push_str(rights.readable().mode_char_color('r', Style::default().yellow()).to_string().as_str());
+        buffer.push_str(rights.writable().mode_char_color('w', Style::default().red()).to_string().as_str());
+        buffer.push_str(rights.executable().mode_char_color('x', Style::default().green()).to_string().as_str());
+    }
+
+    fn file_type(&self, entry: &Entry) -> String {
+        if entry.is_dir() {
+            'd'.blue().to_string()
+        } else {
+            '.'.bold().to_string()
+        }
+    }
+
+    pub fn permissions(&self, entry: &Entry) -> String {
+        let mut result = self.file_type(entry);
+        self.access_rights(&mut result, &entry.permissions().user().permissions);
+        self.access_rights(&mut result, &entry.permissions().group().permissions);
+        self.access_rights(&mut result, &entry.permissions().everyone().permissions);
+        result
     }
 }

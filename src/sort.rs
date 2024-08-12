@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+use chrono::Local;
+
 use crate::{Directory, Entry, Hidden};
 
 /// Helper to determine state of a char from an iterator
@@ -14,6 +16,16 @@ impl IterChar for Option<&char> {
 impl IterChar for Option<char> {
     fn is_ascii_digit(&self) -> bool {
         self.map(|v| v.is_ascii_digit()).unwrap_or_default()
+    }
+}
+impl IterChar for &str {
+    fn is_ascii_digit(&self) -> bool {
+        self.len() == 1 && self.chars().nth(0).is_ascii_digit()
+    }
+}
+impl IterChar for str {
+    fn is_ascii_digit(&self) -> bool {
+        self.len() == 1 && self.chars().nth(0).is_ascii_digit()
     }
 }
 
@@ -56,13 +68,26 @@ impl SortStrategy for Natural {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         // ab102c -> a b 102 c
         // ab20a -> a b 20 a
-        let mut first = first.file_name().chars().peekable();
-        let mut second = second.file_name().chars().peekable();
+        let mut i = 0usize;
+        let mut j =  0usize;
 
-        while let (Some(_), Some(_)) = (first.peek(), second.peek()) {
-            if first.peek().is_ascii_digit() && second.peek().is_ascii_digit() {
-                let u = first.clone().take_while(|v| v.is_ascii_digit()).collect::<String>().parse::<usize>().unwrap();
-                let v = second.clone().take_while(|v| v.is_ascii_digit()).collect::<String>().parse::<usize>().unwrap();
+        let first = first.file_name();
+        let second = second.file_name();
+
+        let _ = second[j..j+1];
+        while i < first.len() && j < second.len() {
+            if first[i..i+1].is_ascii_digit() && second[j..j+1].is_ascii_digit() {
+                let u = i; 
+                let v = j;
+                while i < first.len() && first[i..i+1].is_ascii_digit() {
+                    i+=1;
+                }
+                while j < second.len() && second[j..j+1].is_ascii_digit() {
+                    j+=1;
+                }
+
+                let u = first[u..i].parse::<usize>().unwrap();
+                let v = second[v..j].parse::<usize>().unwrap();
 
                 match u.cmp(&v) {
                     Ordering::Equal => {},
@@ -70,16 +95,18 @@ impl SortStrategy for Natural {
                 }
             } else {
                 // If comparison is not equal return it immediatly
-                match first.next().unwrap().cmp(&second.next().unwrap()) {
+                match first[i..i+1].cmp(&second[j..j+1]) {
                     Ordering::Equal => {},
                     other => return other,
                 }
             }
+            i += 1;
+            j += 1;
         }
 
-        match (first.peek(), second.peek()) {
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
+        match (i < first.len(), j < second.len()) {
+            (false, true) => Ordering::Less,
+            (true, false) => Ordering::Greater,
             _ => Ordering::Equal
         }
     }
@@ -189,6 +216,66 @@ impl<T: Grouping, D: SortStrategy> SortStrategy for Group<T, D> {
             (None, Some(_)) => Ordering::Greater,
             (Some(_), None) => Ordering::Less,
             (None, None) => self.1.compare(first, second)
+        }
+    }
+}
+
+pub struct Date<T=Natural>(T);
+impl Default for Date {
+    fn default() -> Self {
+        Self(Natural)
+    }
+}
+impl<T: SortStrategy> SortStrategy for Date<T> {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
+        let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
+        let s: Option<chrono::DateTime<Local>> = second.metadata().modified().map(|t| t.into()).ok();
+
+        match (f, s) {
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(f), Some(s)) => f.date().cmp(&s.date()),
+            (None, None) => self.0.compare(first, second)
+        }
+    }
+}
+
+pub struct Time<T=Natural>(T);
+impl Default for Time {
+    fn default() -> Self {
+        Self(Natural)
+    }
+}
+impl<T: SortStrategy> SortStrategy for Time<T> {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
+        let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
+        let s: Option<chrono::DateTime<Local>> = second.metadata().modified().map(|t| t.into()).ok();
+
+        match (f, s) {
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(f), Some(s)) => f.time().cmp(&s.time()),
+            (None, None) => self.0.compare(first, second)
+        }
+    }
+}
+
+pub struct DateTime<T=Natural>(T);
+impl Default for DateTime {
+    fn default() -> Self {
+        Self(Natural)
+    }
+}
+impl<T: SortStrategy> SortStrategy for DateTime<T> {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
+        let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
+        let s: Option<chrono::DateTime<Local>> = second.metadata().modified().map(|t| t.into()).ok();
+
+        match (f, s) {
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(f), Some(s)) => f.cmp(&s),
+            (None, None) => self.0.compare(first, second)
         }
     }
 }

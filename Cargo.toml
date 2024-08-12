@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bitflags = "2.6.0"
 chrono = "0.4.38"
 clap = "4.5.14"
 
@@ -19,4 +20,8 @@ terminal_size = "0.3.0"
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58.0"
-features = ["Win32_Storage_FileSystem"]
+features = [
+    "Win32_Storage_FileSystem",
+    "Win32_Security_Authorization",
+    "Win32_System_Threading",
+]
