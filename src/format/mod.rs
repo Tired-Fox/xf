@@ -46,9 +46,9 @@ impl<S: SortStrategy, F: Filter> Formatter for List<S, F> {
             let date = entry.metadata().modified().map(|m| {
                 let date = chrono::DateTime::<Local>::from(m);
                 if Local::now() - date > Duration::weeks(52) {
-                    date.format("%d %b  %Y")
+                    date.format("%e %b  %Y")
                 } else {
-                    date.format("%d %b %H:%M")
+                    date.format("%e %b %H:%M")
                 }.to_string()
             }).unwrap_or("-".to_string());
 
