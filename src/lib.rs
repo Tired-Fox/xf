@@ -1,4 +1,5 @@
 pub mod format;
+pub mod style;
 pub mod sort;
 pub mod filter;
 pub mod permission;
@@ -63,16 +64,23 @@ impl Entry {
     }
 
     pub fn is_hidden(&self) -> bool {
-        self.file_name().starts_with('.')
+        self.permissions().is_hidden()
     }
 
-    pub fn is_dot(&self) -> bool {
+    pub(crate) fn is_dot(&self) -> bool {
         self.file_name().starts_with(".")
+    }
+
+    pub fn is_executable(&self) -> bool {
+        match &self.permissions {
+            Perms::Windows { executable, .. } => *executable,
+            Perms::Unix(_) => unimplemented!(),
+        }
     }
 }
 
 impl Entry {
-    pub fn iter<F: Filter, S: SortStrategy>(&self, parent: &FileSystem<S, F>) -> io::Result<XFIter> {
+    pub fn entries<F: Filter, S: SortStrategy>(&self, parent: &FileSystem<S, F>) -> io::Result<Vec<Entry>> {
         if !self.is_dir() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Entry is not a directory"));
         }
@@ -89,7 +97,7 @@ impl Entry {
 
         entries.sort_by(|f, s| parent.sorter.compare(f, s));
 
-        Ok(XFIter(entries))
+        Ok(entries)
     }
 }
 
@@ -137,7 +145,7 @@ impl<A: AsRef<str>> NormalizeCanonicalize for A {
 }
 
 /// Main logic for transforming, sorting, and filtering file entries
-pub struct FileSystem<S = Directory, F = Not<Hidden>> {
+pub struct FileSystem<S = (), F = Not<Hidden>> {
     path: PathBuf,
     filters: F,
     sorter: S,
@@ -157,7 +165,7 @@ impl Default for FileSystem {
         Self {
             path: path.normalize_and_canonicalize().expect("Could not find the path specified"),
             filters: Not::<Hidden>::default(),
-            sorter: Directory::default(),
+            sorter: (),
         }
     }
 }
@@ -197,13 +205,13 @@ impl<P: AsRef<Path>> From<P> for FileSystem {
         FileSystem {
             path:  value.normalize_and_canonicalize().expect("Could not find the path specified"),
             filters: Not::<Hidden>::default(),
-            sorter: Directory::default(),
+            sorter: (),
         }
     }
 }
 
 impl<S: SortStrategy, F: Filter> FileSystem<S, F> {
-    pub fn iter(&self) -> io::Result<XFIter> {
+    pub fn entries(&self) -> io::Result<Vec<Entry>> {
         let mut entries = fs::read_dir(&self.path)?
             .filter_map(|v| match v {
                 Ok(v) => {
@@ -216,34 +224,23 @@ impl<S: SortStrategy, F: Filter> FileSystem<S, F> {
 
         entries.sort_by(|f, s| self.sorter.compare(f, s));
 
-        Ok(XFIter(entries))
-    }
-}
-
-/// Iterator over the entires in the filesystem. This will apply filters and sorting
-/// provided by the [`XF`] object.
-pub struct XFIter(Vec<Entry>);
-impl Iterator for XFIter {
-    type Item = Entry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.pop()
+        Ok(entries)
     }
 }
 
 
 /// A sorter that will sort directories first
-pub struct Directory<T = Natural>(T);
-impl<T: Default> Default for Directory<T> {
+pub struct Directory<T = Natural>(pub T);
+impl Default for Directory {
     fn default() -> Self {
-        Self(T::default())
+        Self(Natural)
     }
 }
 impl<T: SortStrategy> SortStrategy for Directory<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         match (first.entry_type, second.entry_type) {
-            (EntryType::Dir, EntryType::File) => Ordering::Greater,
-            (EntryType::File, EntryType::Dir) => Ordering::Less,
+            (EntryType::Dir, EntryType::File) => Ordering::Less,
+            (EntryType::File, EntryType::Dir) => Ordering::Greater,
             _ => {
                 self.0.compare(first, second)
             }
@@ -276,8 +273,8 @@ impl<T: PartialEq> PartialEq for Hidden<T> {
 impl<T: SortStrategy> SortStrategy for Hidden<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         match (first.is_hidden(), second.is_hidden()) {
-            (true, false) => Ordering::Greater,
-            (false, true) => Ordering::Less,
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
             _ => self.0.compare(first, second)
         }
     }

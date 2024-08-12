@@ -25,11 +25,7 @@ pub trait SortStrategy {
 // Default sorter sorts by comparing file names as strings
 impl SortStrategy for () {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
-        match first.path().cmp(second.path()) {
-            Ordering::Less => Ordering::Greater,
-            Ordering::Greater => Ordering::Less,
-            other => other
-        }
+        first.path().cmp(second.path())
     }
 }
 
@@ -69,23 +65,21 @@ impl SortStrategy for Natural {
                 let v = second.clone().take_while(|v| v.is_ascii_digit()).collect::<String>().parse::<usize>().unwrap();
 
                 match u.cmp(&v) {
-                    Ordering::Less => return Ordering::Greater,
-                    Ordering::Greater => return Ordering::Less,
-                    _ => {}
+                    Ordering::Equal => {},
+                    other => return other,
                 }
             } else {
                 // If comparison is not equal return it immediatly
                 match first.next().unwrap().cmp(&second.next().unwrap()) {
-                    Ordering::Less => return Ordering::Greater,
-                    Ordering::Greater => return Ordering::Less,
-                    _ => {}
+                    Ordering::Equal => {},
+                    other => return other,
                 }
             }
         }
 
         match (first.peek(), second.peek()) {
-            (None, Some(_)) => Ordering::Greater,
-            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
             _ => Ordering::Equal
         }
     }
@@ -141,12 +135,11 @@ impl<T: SortStrategy> SortStrategy for Extension<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         match (first.extension(), second.extension()) {
             (Some(f), Some(s)) => match f.cmp(&s) {
-                Ordering::Less => Ordering::Greater,
-                Ordering::Greater => Ordering::Less,
-                Ordering::Equal => self.0.compare(first, second)
+                Ordering::Equal => self.0.compare(first, second),
+                other => other
             },
-            (None, Some(_)) => Ordering::Greater,
-            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
             (None, None) => self.0.compare(first, second)
         }
     }
@@ -190,12 +183,11 @@ impl<T: Grouping, D: SortStrategy> SortStrategy for Group<T, D> {
 
         match (f, s) {
             (Some(f), Some(s)) => match f.cmp(&s) {
-                Ordering::Less => Ordering::Greater,
-                Ordering::Greater => Ordering::Less,
-                Ordering::Equal => self.0.compare_within_group(f, first, second)
+                Ordering::Equal => self.0.compare_within_group(f, first, second),
+                other => other,
             },
-            (None, Some(_)) => Ordering::Less,
-            (Some(_), None) => Ordering::Greater,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
             (None, None) => self.1.compare(first, second)
         }
     }

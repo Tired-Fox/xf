@@ -4,8 +4,9 @@ use std::fs::DirEntry;
 
 use owo_colors::{OwoColorize, Style};
 
+use windows::core::HRESULT;
 #[cfg(target_os = "windows")]
-use windows::{core::PCSTR, Win32::Storage::FileSystem::GetFileAttributesA};
+use windows::{core::PCSTR, Win32::Storage::FileSystem::{GetFileAttributesA, GetBinaryTypeA}};
 
 
 /// Helper to create either a dash (`-`) or a char representing the flag
@@ -45,6 +46,7 @@ pub struct RWE {
 pub enum Perms {
     Unix(u32),
     Windows {
+        executable: bool,
         directory: bool,
         archive: bool,
         readonly: bool,
@@ -55,8 +57,9 @@ pub enum Perms {
 }
 
 impl Perms {
-    pub fn from_windows(value: u32) -> Self {
+    pub fn from_windows(value: u32, executable: bool) -> Self {
         Self::Windows {
+            executable,
             directory: value & 0x0010 != 0,
             archive: value & 0x0020 != 0,
             readonly: value & 0x0001 != 0,
@@ -65,20 +68,29 @@ impl Perms {
             reparse_point: value & 0x0400 != 0,
         }
     }
+
+    pub fn is_hidden(&self) -> bool {
+        match self {
+            Self::Windows { hidden, .. } => *hidden,
+            // TODO: Check based on unix mode filetype
+            _ => false
+        }
+    }
 }
 
 impl std::fmt::Display for Perms {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Unix(_) => Ok(()),
-            Self::Windows { directory, archive, readonly, hidden, system, reparse_point } => {
-                write!(f, "{}{}{}{}{}{}",
+            Self::Unix(_) => unimplemented!(),
+            Self::Windows { executable, directory, archive, readonly, hidden, system, reparse_point } => {
+                write!(f, "{}{}{}{}{}{}{}",
                     directory.mode_char('d'),
                     archive.mode_char('a'),
                     readonly.mode_char('r'),
                     hidden.mode_char('h'),
                     system.mode_char('s'),
-                    reparse_point.mode_char('l')
+                    reparse_point.mode_char('l'),
+                    executable.mode_char('x')
                 )
             }
         }
@@ -91,15 +103,18 @@ impl From<&DirEntry> for Perms {
         {
             let permissions = value.metadata().unwrap().permissions();
             let _ = permissions.mode();
-            Perms::Unix(0)
+            unimplemented!()
         }
 
         #[cfg(target_os = "windows")]
         unsafe {
             let mut path = value.path().display().to_string().replace('/', "\\");
             path.push('\0');
-            let attributes = GetFileAttributesA(PCSTR::from_raw(path.as_ptr()));
-            Perms::from_windows(attributes)
+            let mut binary_type = 0u32;
+            Perms::from_windows(
+                GetFileAttributesA(PCSTR::from_raw(path.as_ptr())),
+                GetBinaryTypeA(PCSTR::from_raw(path.as_ptr()), &mut binary_type as *mut _).is_ok()
+            )
         }
     }
 }

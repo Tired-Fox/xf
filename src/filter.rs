@@ -3,8 +3,7 @@ use std::fmt::Debug;
 use crate::Entry;
 
 pub trait Filter
-where
-    Self: Sized
+where Self: Sized
 {
     type Not: Filter;
 
@@ -72,6 +71,19 @@ impl Filter for Extensions {
     }
 }
 
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Dot;
+impl Filter for Dot {
+    type Not = Not<Self>;
+
+    fn keep(&self, entry: &Entry) -> bool {
+        entry.is_dot() 
+    }
+
+    fn not(self) -> Self::Not {
+        Not::new(self)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Match(regex::Regex);

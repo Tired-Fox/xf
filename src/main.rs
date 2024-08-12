@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use owo_colors::{colors::xterm::Gray, OwoColorize, Style};
-use xf::{format::Formatter, permission::{ModeChar, Perms}, FileSystem};
+use xf::{format::Formatter, permission::{ModeChar, Perms}, sort::Natural, style::{Colorizer, GroupMatch}, Directory, FileSystem};
 
 pub trait Colorize {
     fn colorize(&self) -> String;
@@ -10,15 +10,16 @@ pub trait Colorize {
 impl Colorize for Perms {
     fn colorize(&self) -> String {
         match self {
-            Self::Unix(_) => String::new(),
-            Self::Windows { directory, archive, readonly, hidden, system, reparse_point } => {
-                format!("{}{}{}{}{}{}",
+            Self::Unix(_) => unimplemented!(),
+            Self::Windows { executable, directory, archive, readonly, hidden, system, reparse_point } => {
+                format!("{}{}{}{}{}{}{}",
                     directory.mode_char_color('d', Style::default().blue()),
                     archive.mode_char_color('a', Style::default().purple()),
                     readonly.mode_char_color('r', Style::default().yellow()),
                     hidden.mode_char_color('h', Style::default().fg::<Gray>()),
                     system.mode_char_color('s', Style::default().red()),
-                    reparse_point.mode_char_color('l', Style::default().cyan())
+                    reparse_point.mode_char_color('l', Style::default().cyan()),
+                    executable.mode_char_color('x', Style::default().green()),
                 )
             }
         }
@@ -59,8 +60,15 @@ fn main() {
 
     let path = matches.get_one::<String>("path").cloned().unwrap_or(".".to_string());
     let file_system = FileSystem::from(path)
-        .with_filter(());
+        .with_sorter(Directory::default());
 
-    xf::format::Grid::new(file_system)
-        .print().unwrap();
+    let colorizer = Colorizer::default()
+        .group("DIR", [GroupMatch::Directory], Style::default().blue())
+        .group("EXE", [GroupMatch::Executable], Style::default().green())
+        .group("IMAGE", [GroupMatch::extensions(["jpg", "png", "gif", "webp", "avif"])], Style::default().magenta())
+        .group("CONFIG", [GroupMatch::filenames(["Cargo.toml", "config.toml"])], Style::default().yellow().underline())
+        .group("HIDDEN", [GroupMatch::Hidden, GroupMatch::starts_with("."), GroupMatch::extensions(["lock"])], Style::default().fg::<Gray>());
+
+    xf::format::List::new(file_system)
+        .print(colorizer).unwrap();
 }
