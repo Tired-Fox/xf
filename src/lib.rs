@@ -64,7 +64,7 @@ impl Entry {
     }
 
     pub fn is_hidden(&self) -> bool {
-        self.permissions().is_hidden()
+        self.is_dot() || self.permissions().is_hidden()
     }
 
     pub(crate) fn is_dot(&self) -> bool {
@@ -72,15 +72,7 @@ impl Entry {
     }
 
     pub fn is_executable(&self) -> bool {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
-        return {
-            self.permissions().user().executable()
-                || self.permissions().group().executable()
-                || self.permissions().everyone().executable()
-        };
-
-        #[cfg(target_os = "windows")]
-        return self.permissions().attributes().executable;
+        self.permissions().user().executable()
     }
 }
 

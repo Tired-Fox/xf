@@ -1,4 +1,4 @@
-use std::{ops::{Range, RangeTo}, os::windows::fs::MetadataExt};
+use std::ops::Range;
 
 use chrono::Datelike;
 use hashbrown::{HashMap, HashSet};
@@ -141,15 +141,15 @@ pub fn humansize(value: u64) -> String {
         // Bytes
         1..1_024 => value.to_string(),
         // Kilobytes
-        1_024..1_048_576 => format!("{}K", value / 1_024),
+        1_024..1_048_576 => format!("{}K", (value as f32 / 1_024.0).round() as u8),
         // Megabytes
-        1_048_576..1_073_741_824 => format!("{}M", value / 1_048_576),
+        1_048_576..1_073_741_824 => format!("{}M", (value as f32 / 1_048_576.0).round() as u8),
         // Gigbytes
-        1_073_741_824..1_099_511_627_776 => format!("{}G", value / 1_099_511_627_776),
+        1_073_741_824..1_099_511_627_776 => format!("{}G", (value as f32 / 1_099_511_627_776.0).round() as u8),
         // Terabytes
-        1_099_511_627_776..1_125_899_906_842_624 => format!("{}T", value / 1_099_511_627_776),
+        1_099_511_627_776..1_125_899_906_842_624 => format!("{}T", (value as f32 / 1_099_511_627_776.0).round() as u8),
         // Petabytes
-        _ => format!("{}P", value / 1_125_899_906_842_624)
+        _ => format!("{}P", (value as f32 / 1_125_899_906_842_624.0).round() as u8)
     }
 }
 
@@ -196,6 +196,7 @@ impl Colorizer {
         for m in self.group_styles.iter() {
             if m.matches(entry) {
                 style = m.style();
+                break;
             }
         }
         
@@ -206,8 +207,8 @@ impl Colorizer {
         if entry.metadata().is_symlink() {
             format!("   {}", '^'.fg::<Gray>())
         } else {
-            let hs = humansize(entry.metadata().file_size());
-            format!("{}{}", (0..hs.len()-4).spacer(), hs.fg::<Gray>())
+            let hs = humansize(entry.metadata().len());
+            format!("{}{}", (0..4usize.saturating_sub(hs.len())).spacer(), hs.fg::<Gray>())
         }
     }
 

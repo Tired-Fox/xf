@@ -22,10 +22,10 @@ fn main() {
 
     let colorizer = Colorizer::default()
         .group("DIR", [GroupMatch::Directory], Style::default().blue())
-        .group("EXE", [GroupMatch::Executable], Style::default().green())
+        .group("HIDDEN", [GroupMatch::Hidden, GroupMatch::starts_with(".")], Style::default().fg::<Gray>())
         .group("IMAGE", [GroupMatch::extensions(["jpg", "png", "gif", "webp", "avif", "ico"])], Style::default().magenta())
         .group("CONFIG", [GroupMatch::filenames(["Cargo.toml", "config.toml"])], Style::default().yellow().underline())
-        .group("HIDDEN", [GroupMatch::Hidden, GroupMatch::starts_with("."), GroupMatch::extensions(["lock"])], Style::default().fg::<Gray>());
+        .group("EXE", [GroupMatch::Executable, GroupMatch::extensions(["exe", "sh"])], Style::default().green());
 
     if matches.get_flag("pretty") {
         println!();

@@ -1,4 +1,4 @@
-use std::{fs::DirEntry, os::windows::ffi::OsStrExt, path::PathBuf};
+use std::{fs::DirEntry, path::PathBuf};
 
 use crate::style::ModeChar;
 
@@ -43,9 +43,7 @@ impl From<PathBuf> for Attributes {
         };
 
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        return {
-            unimplemented!()
-        }
+        return Self::default()
     }
 }
 
@@ -95,10 +93,23 @@ impl TryFrom<&DirEntry> for Perms {
     fn try_from(value: &DirEntry) -> Result<Self, Self::Error> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
-            //use std::os::unix::fs::PermissionsExt;
-            //let permissions = value.metadata().unwrap().permissions();
-            //let _ = permissions.mode();
-            unimplemented!()
+            use std::os::unix::fs::{PermissionsExt, MetadataExt};
+            let meta = value.metadata().unwrap();
+            let permissions = meta.permissions();
+            let st_mode = permissions.mode();
+
+            let user = users::get_user_by_uid(meta.uid());
+            let group = users::get_group_by_gid(meta.gid());
+            Ok(Self {
+                user: User {
+                    domain: Default::default(),
+                    name: user.map(|usr| usr.name().to_string_lossy().to_string()).unwrap_or_default(),
+                    permissions: AccessRights(((st_mode & 0b111 << 6)>>6) as u8),
+                },
+                group: Group::new("", group.map(|grp| grp.name().to_string_lossy().to_string()).unwrap_or_default(), AccessRights(((st_mode & 0b111 << 3)>>3) as u8)),
+                everyone: Group::new("", "Everyone", AccessRights((st_mode & 0b111) as u8)),
+                attributes: Attributes::default(),
+            })
         }
 
         #[cfg(target_os = "windows")]
@@ -118,9 +129,9 @@ impl TryFrom<&DirEntry> for Perms {
 pub struct AccessRights(u8);
 bitflags::bitflags! {
     impl AccessRights: u8 {
-        const Read = 1;
+        const Read = 1<< 2;
         const Write = 1 << 1;
-        const Execute = 1 << 2;
+        const Execute = 1;
     }
 }
 impl AccessRights {
@@ -154,26 +165,24 @@ impl std::fmt::Debug for AccessRights {
             .finish()
     }
 }
+#[cfg(target_os = "windows")]
 impl From<u32> for AccessRights {
     fn from(value: u32) -> Self {
-        #[cfg(target_os = "windows")]
-        return {
-            use windows::Win32::Storage::FileSystem::{
-                FILE_ACCESS_RIGHTS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
-            };
-            let value = FILE_ACCESS_RIGHTS(value);
-            let mut result = Self::empty();
-            if value.contains(FILE_GENERIC_READ) {
-                result |= Self::Read;
-            }
-            if value.contains(FILE_GENERIC_WRITE) {
-                result |= Self::Write;
-            }
-            if value.contains(FILE_GENERIC_EXECUTE) {
-                result |= Self::Execute;
-            }
-            result
+        use windows::Win32::Storage::FileSystem::{
+            FILE_ACCESS_RIGHTS, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
         };
+        let value = FILE_ACCESS_RIGHTS(value);
+        let mut result = Self::empty();
+        if value.contains(FILE_GENERIC_READ) {
+            result |= Self::Read;
+        }
+        if value.contains(FILE_GENERIC_WRITE) {
+            result |= Self::Write;
+        }
+        if value.contains(FILE_GENERIC_EXECUTE) {
+            result |= Self::Execute;
+        }
+        result
     }
 }
 
@@ -202,6 +211,18 @@ pub struct Group {
     pub permissions: AccessRights,
 }
 impl Group {
+    pub fn new<S: ToString, S2: ToString>(
+        domain: S,
+        name: S2,
+        permissions: AccessRights,
+    ) -> Self {
+        Self {
+            domain: domain.to_string(),
+            name: name.to_string(),
+            permissions,
+        }
+    }
+
     pub fn readable(&self) -> bool {
         self.permissions.readable()
     }
@@ -421,19 +442,6 @@ mod win32 {
                 name,
                 permissions: rights,
             })
-        }
-    }
-    impl Group {
-        pub fn new<S: ToString, S2: ToString>(
-            domain: S,
-            name: S2,
-            permissions: AccessRights,
-        ) -> Self {
-            Self {
-                domain: domain.to_string(),
-                name: name.to_string(),
-                permissions,
-            }
         }
     }
     impl TryFrom<(SID, AccessRights)> for Group {
