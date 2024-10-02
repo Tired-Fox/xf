@@ -11,14 +11,18 @@ fn main() {
             .default_value(".")
             .action(clap::ArgAction::Set)
         )
-        .arg(clap::Arg::new("grid")
-            .long("grid")
-            .short('g')
-            .action(ArgAction::SetTrue)
+        .arg(clap::Arg::new("help")
+            .long("help")
+            .action(ArgAction::Help)
         )
         .arg(clap::Arg::new("recursive")
-            .long("recursive")
+            .long("tree")
             .short('R')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(clap::Arg::new("long")
+            .long("long")
+            .short('l')
             .action(ArgAction::SetTrue)
         )
         .arg(clap::Arg::new("filter")
@@ -51,25 +55,6 @@ fn main() {
             .multiple(false)
             .required(false)
         )
-        .group(ArgGroup::new("display")
-            .args(["grid", "recursive"])
-            .multiple(false)
-            .required(false)
-        )
-        // Include and implement
-        // -R: list recursively
-        //
-        // Include and implement over time:
-        // -h: print file sizes in human readable format
-        // -g: display group instead of owner
-        // -i: inode (index) number of each file
-        //
-        // Include But Do Nothing:
-        // -d: list directories instead of their contents
-        .arg(clap::Arg::new("help")
-            .long("help")
-            .action(ArgAction::Help)
-        )
         .get_matches();
 
     let path = matches.get_one::<String>("path").cloned().unwrap_or(".".to_string());
@@ -86,17 +71,14 @@ fn main() {
         file_system.set_filter(Match::new(f).unwrap())
     }
 
-    // last-modified
     if matches.get_flag("last-modified") {
         file_system.set_sorter(DateTime(Directory::default()));
     }
 
-    // reverse
     if matches.get_flag("reverse") {
         file_system.set_sorter(Reverse(Directory(Reverse(Natural))));
     }
 
-    // by-size
     if matches.get_flag("by-size") {
         file_system.set_sorter(Size(Directory::default()));
     }
@@ -108,16 +90,14 @@ fn main() {
         .group("CONFIG", [GroupMatch::filenames(["Cargo.toml", "config.toml"])], Style::default().yellow().underline())
         .group("EXE", [GroupMatch::Executable, GroupMatch::extensions(["exe", "sh"])], Style::default().green());
 
-    // recursive
-    if matches.get_flag("grid") {
-        xf::format::Grid::new(file_system)
+    if matches.get_flag("recursive") {
+        xf::format::Tree::new(file_system, matches.get_flag("long"))
             .print(colorizer).unwrap();
-    } else if matches.get_flag("recursive") {
-        xf::format::Tree::new(file_system)
-            .print(colorizer).unwrap();
-    } else {
+    } else if matches.get_flag("long") {
         xf::format::List::new(file_system)
             .print(colorizer).unwrap();
-        println!();
+    } else {
+        xf::format::Grid::new(file_system)
+            .print(colorizer).unwrap();
     }
 }
