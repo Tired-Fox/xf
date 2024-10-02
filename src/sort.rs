@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, os::windows::fs::MetadataExt};
 
 use chrono::Local;
 
@@ -147,7 +147,7 @@ impl<T> Matches for Extension<T> {
 }
 
 // Sort by file extension
-pub struct Extension<T = Natural>(T);
+pub struct Extension<T = Natural>(pub T);
 impl<T: Default> Default for Extension<T> {
     fn default() -> Self {
         Self(T::default())
@@ -197,7 +197,7 @@ where
     }
 }
 
-pub struct Group<T, D = Natural>(T, D);
+pub struct Group<T, D = Natural>(pub T, pub D);
 impl<T: Default, D: Default> Default for Group<T, D> {
     fn default() -> Self {
         Self(T::default(), D::default())
@@ -220,7 +220,7 @@ impl<T: Grouping, D: SortStrategy> SortStrategy for Group<T, D> {
     }
 }
 
-pub struct Date<T=Natural>(T);
+pub struct Date<T=Natural>(pub T);
 impl Default for Date {
     fn default() -> Self {
         Self(Natural)
@@ -240,7 +240,7 @@ impl<T: SortStrategy> SortStrategy for Date<T> {
     }
 }
 
-pub struct Time<T=Natural>(T);
+pub struct Time<T=Natural>(pub T);
 impl Default for Time {
     fn default() -> Self {
         Self(Natural)
@@ -260,7 +260,7 @@ impl<T: SortStrategy> SortStrategy for Time<T> {
     }
 }
 
-pub struct DateTime<T=Natural>(T);
+pub struct DateTime<T=Natural>(pub T);
 impl Default for DateTime {
     fn default() -> Self {
         Self(Natural)
@@ -276,6 +276,41 @@ impl<T: SortStrategy> SortStrategy for DateTime<T> {
             (None, Some(_)) => Ordering::Greater,
             (Some(f), Some(s)) => f.cmp(&s),
             (None, None) => self.0.compare(first, second)
+        }
+    }
+}
+
+pub struct Reverse<T=Natural>(pub T);
+impl Default for Reverse {
+    fn default() -> Self {
+        Self(Natural)
+    }
+}
+impl<T: SortStrategy> SortStrategy for Reverse<T> {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
+        match self.0.compare(first, second) {
+            Ordering::Less => Ordering::Greater,
+            Ordering::Greater => Ordering::Less,
+            Ordering::Equal => Ordering::Equal,
+        }
+    }
+}
+
+pub struct Size<T=Natural>(pub T);
+impl Default for Size {
+    fn default() -> Self {
+        Self(Natural)
+    }
+}
+impl<T: SortStrategy> SortStrategy for Size<T> {
+    fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
+        let fs = first.metadata().file_size();
+        let ss = second.metadata().file_size();
+
+        match fs.cmp(&ss) {
+            Ordering::Equal => self.0.compare(first, second),
+            Ordering::Greater => Ordering::Less,
+            Ordering::Less => Ordering::Greater,
         }
     }
 }

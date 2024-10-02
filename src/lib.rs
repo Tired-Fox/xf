@@ -207,6 +207,14 @@ impl FileSystem {
             sorter: self.sorter,
         }
     }
+
+    pub fn set_sorter<S: SortStrategy + 'static>(&mut self, sorter: S) {
+        self.sorter = Rc::new(sorter);
+    }
+
+    pub fn set_filter<F: Filter + 'static>(&mut self, filters: F) {
+        self.filters = Rc::new(filters);
+    }
 }
 
 impl<P: AsRef<Path>> From<P> for FileSystem {
