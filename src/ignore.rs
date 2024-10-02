@@ -14,7 +14,15 @@ impl GitIgnore {
             return true;
         }
 
-        let path = path.as_ref().display().to_string().replace("\\", "/");
+        let mut path = path.as_ref().display().to_string().replace("\\", "/");
+        if path.starts_with("/") {
+            path = path.strip_prefix('/').unwrap().to_string();
+        }
+
+        if path.ends_with("/") {
+            path = path.strip_suffix('/').unwrap().to_string();
+        }
+
         for exclude in self.exclude.iter() {
             if exclude.is_match(path.as_str()) {
                 return false;
@@ -41,19 +49,28 @@ impl FromStr for GitIgnore {
         let mut ignore = GitIgnore::default();
 
         for line in s.lines() {
-            let line = line.trim();
+            let mut line = line.trim().to_string();
 
             if line.is_empty() || line.starts_with("#") {
                 continue;
             } else if line.starts_with("!") {
                 ignore.include.push(PathBuf::from(line.strip_prefix('!').unwrap()));
             } else {
+                line = line
+                    .replace(".", "\\.")
+                    .replace("**", ".*")
+                    .replace("*", r"[^/\\]+");
+
+                if line.starts_with("/") {
+                    line = line.strip_prefix('/').unwrap().to_string();
+                }
+
+                if line.ends_with("/") {
+                    line = line.strip_suffix('/').unwrap().to_string();
+                }
+
                 ignore.exclude.push(
-                    Regex::new(format!("^{}$", line
-                        .replace(".", "\\.")
-                        .replace("**", ".*")
-                        .replace("*", r"[^/\\]+")
-                        .as_str()).as_str())
+                    Regex::new(format!("^{}$", line.as_str()).as_str())
                     .map_err(|e| e.to_string())?
                 )
             }

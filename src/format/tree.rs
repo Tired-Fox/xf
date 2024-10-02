@@ -23,7 +23,9 @@ impl Tree {
             .filter(|e| {
                 ignore
                     .as_ref()
-                    .map(|v| v.include(e.path().strip_prefix(&self.0.path).unwrap()))
+                    .map(|v| {
+                        v.include(e.path().strip_prefix(&self.0.path).unwrap())
+                    })
                     .unwrap_or(true)
             })
         {
