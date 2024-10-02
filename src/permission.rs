@@ -55,6 +55,7 @@ pub struct Perms {
     everyone: Group,
     attributes: Attributes,
 }
+
 impl Perms {
     pub fn is_hidden(&self) -> bool {
         self.attributes.hidden
@@ -146,6 +147,7 @@ impl AccessRights {
         self.contains(Self::Execute)
     }
 }
+
 impl std::fmt::Display for AccessRights {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -157,6 +159,7 @@ impl std::fmt::Display for AccessRights {
         )
     }
 }
+
 impl std::fmt::Debug for AccessRights {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AccessRights")
@@ -166,6 +169,7 @@ impl std::fmt::Debug for AccessRights {
             .finish()
     }
 }
+
 #[cfg(target_os = "windows")]
 impl From<u32> for AccessRights {
     fn from(value: u32) -> Self {
@@ -193,6 +197,7 @@ pub struct User {
     pub name: String,
     pub permissions: AccessRights,
 }
+
 impl User {
     pub fn readable(&self) -> bool {
         self.permissions.readable()
@@ -211,6 +216,7 @@ pub struct Group {
     pub name: String,
     pub permissions: AccessRights,
 }
+
 impl Group {
     pub fn new<S: ToString, S2: ToString>(
         domain: S,

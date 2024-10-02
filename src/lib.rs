@@ -274,6 +274,7 @@ impl Default for Directory {
         Self(Natural)
     }
 }
+
 impl<T: Clone> Clone for Directory<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())        
@@ -304,16 +305,19 @@ impl<T: Default> Default for Hidden<T> {
         Self(T::default())
     }
 }
+
 impl<T: Clone> Clone for Hidden<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
+
 impl<T: PartialEq> PartialEq for Hidden<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0)
     }
 }
+
 impl<T: SortStrategy> SortStrategy for Hidden<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         match (first.is_hidden(), second.is_hidden()) {
@@ -323,6 +327,7 @@ impl<T: SortStrategy> SortStrategy for Hidden<T> {
         }
     }
 }
+
 impl Filter for Hidden {
     fn keep(&self, entry: &Entry) -> bool {
         entry.is_hidden()

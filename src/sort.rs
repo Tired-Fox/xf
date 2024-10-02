@@ -8,21 +8,25 @@ use crate::{Directory, Entry, Hidden};
 pub trait IterChar {
     fn is_ascii_digit(&self) -> bool;
 }
+
 impl IterChar for Option<&char> {
     fn is_ascii_digit(&self) -> bool {
         self.map(|v| v.is_ascii_digit()).unwrap_or_default()
     }
 }
+
 impl IterChar for Option<char> {
     fn is_ascii_digit(&self) -> bool {
         self.map(|v| v.is_ascii_digit()).unwrap_or_default()
     }
 }
+
 impl IterChar for &str {
     fn is_ascii_digit(&self) -> bool {
         self.len() == 1 && self.chars().nth(0).is_ascii_digit()
     }
 }
+
 impl IterChar for str {
     fn is_ascii_digit(&self) -> bool {
         self.len() == 1 && self.chars().nth(0).is_ascii_digit()
@@ -148,16 +152,19 @@ impl<T> Matches for Extension<T> {
 
 // Sort by file extension
 pub struct Extension<T = Natural>(pub T);
+
 impl<T: Default> Default for Extension<T> {
     fn default() -> Self {
         Self(T::default())
     }
 }
+
 impl<T: PartialEq> PartialEq for Extension<T> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0)
     }
 }
+
 impl<T: SortStrategy> SortStrategy for Extension<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         match (first.extension(), second.extension()) {
@@ -198,11 +205,13 @@ where
 }
 
 pub struct Group<T, D = Natural>(pub T, pub D);
+
 impl<T: Default, D: Default> Default for Group<T, D> {
     fn default() -> Self {
         Self(T::default(), D::default())
     }
 }
+
 impl<T: Grouping, D: SortStrategy> SortStrategy for Group<T, D> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let f = T::get_group_index(first);
@@ -221,11 +230,13 @@ impl<T: Grouping, D: SortStrategy> SortStrategy for Group<T, D> {
 }
 
 pub struct Date<T=Natural>(pub T);
+
 impl Default for Date {
     fn default() -> Self {
         Self(Natural)
     }
 }
+
 impl<T: SortStrategy> SortStrategy for Date<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
@@ -241,11 +252,13 @@ impl<T: SortStrategy> SortStrategy for Date<T> {
 }
 
 pub struct Time<T=Natural>(pub T);
+
 impl Default for Time {
     fn default() -> Self {
         Self(Natural)
     }
 }
+
 impl<T: SortStrategy> SortStrategy for Time<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
@@ -261,11 +274,13 @@ impl<T: SortStrategy> SortStrategy for Time<T> {
 }
 
 pub struct DateTime<T=Natural>(pub T);
+
 impl Default for DateTime {
     fn default() -> Self {
         Self(Natural)
     }
 }
+
 impl<T: SortStrategy> SortStrategy for DateTime<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
@@ -281,11 +296,13 @@ impl<T: SortStrategy> SortStrategy for DateTime<T> {
 }
 
 pub struct Reverse<T=Natural>(pub T);
+
 impl Default for Reverse {
     fn default() -> Self {
         Self(Natural)
     }
 }
+
 impl<T: SortStrategy> SortStrategy for Reverse<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         match self.0.compare(first, second) {
@@ -297,11 +314,13 @@ impl<T: SortStrategy> SortStrategy for Reverse<T> {
 }
 
 pub struct Size<T=Natural>(pub T);
+
 impl Default for Size {
     fn default() -> Self {
         Self(Natural)
     }
 }
+
 impl<T: SortStrategy> SortStrategy for Size<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let fs = first.metadata().file_size();

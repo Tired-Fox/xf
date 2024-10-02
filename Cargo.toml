@@ -10,13 +10,13 @@ clap = "4.5.14"
 
 dirs = "5.0.1"
 dunce = "1.0.5"
-hashbrown = "0.14.5"
+hashbrown = "0.15.0"
 
 owo-colors = { version = "4.0.0", features = ["supports-color", "supports-colors"] }
 regex = "1.10.6"
 strum = "0.26.3"
 strum_macros = "0.26.4"
-terminal_size = "0.3.0"
+terminal_size = "0.4.0"
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58.0"

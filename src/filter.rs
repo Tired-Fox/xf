@@ -65,6 +65,7 @@ impl Extensions {
         self
     }
 }
+
 impl Filter for Extensions {
     #[inline]
     fn keep(&self, entry: &Entry) -> bool {
@@ -75,6 +76,7 @@ impl Filter for Extensions {
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Dot;
+
 impl Filter for Dot {
     fn keep(&self, entry: &Entry) -> bool {
         entry.is_dot() 
@@ -83,11 +85,13 @@ impl Filter for Dot {
 
 #[derive(Debug, Clone)]
 pub struct Match(regex::Regex);
+
 impl Match {
     pub fn new<S: AsRef<str>>(pattern: S) -> Result<Self, regex::Error> {
         Ok(Self(regex::Regex::new(pattern.as_ref())?))
     }
 }
+
 impl Filter for Match {
     fn keep(&self, entry: &Entry) -> bool {
         self.0.is_match(entry.file_name()) 
@@ -95,11 +99,13 @@ impl Filter for Match {
 }
 
 pub struct And<A, B>(A, B);
+
 impl<A: Default, B: Default> Default for And<A, B> {
     fn default() -> Self {
         And(A::default(), B::default())
     }
 }
+
 impl<A: Debug, B: Debug> Debug for And<A, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Chain")
@@ -108,16 +114,19 @@ impl<A: Debug, B: Debug> Debug for And<A, B> {
             .finish()
     }
 }
+
 impl<A: PartialEq, B: PartialEq> PartialEq for And<A, B> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0) && self.1.eq(&other.1)
     }
 }
+
 impl<A: Clone, B: Clone> Clone for And<A, B> {
     fn clone(&self) -> Self {
         And(self.0.clone(), self.1.clone())
     }
 }
+
 impl<A, B> And<A, B> {
     pub fn new(a: A, b: B) -> Self {
         Self(a, b)
@@ -131,6 +140,7 @@ impl<A, B> And<A, B> {
         &self.1
     }
 }
+
 impl<A: Filter, B: Filter> Filter for And<A, B> {
     fn keep(&self, entry: &Entry) -> bool {
         self.0.keep(entry) && self.1.keep(entry)
@@ -138,11 +148,13 @@ impl<A: Filter, B: Filter> Filter for And<A, B> {
 }
 
 pub struct Or<A, B>(A, B);
+
 impl<A: Default, B: Default> Default for Or<A, B> {
     fn default() -> Self {
         Or(A::default(), B::default())
     }
 }
+
 impl<A: Debug, B: Debug> Debug for Or<A, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Or")
@@ -151,16 +163,19 @@ impl<A: Debug, B: Debug> Debug for Or<A, B> {
             .finish()
     }
 }
+
 impl<A: PartialEq, B: PartialEq> PartialEq for Or<A, B> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0) && self.1.eq(&other.1)
     }
 }
+
 impl<A: Clone, B: Clone> Clone for Or<A, B> {
     fn clone(&self) -> Self {
         Or(self.0.clone(), self.1.clone())
     }
 }
+
 impl<A, B> Or<A, B> {
     pub fn new(a: A, b: B) -> Self {
         Self(a, b)
@@ -174,6 +189,7 @@ impl<A, B> Or<A, B> {
         &self.1
     }
 }
+
 impl<A: Filter, B: Filter> Filter for Or<A, B> {
     fn keep(&self, entry: &Entry) -> bool {
         self.0.keep(entry) || self.1.keep(entry)
@@ -181,11 +197,13 @@ impl<A: Filter, B: Filter> Filter for Or<A, B> {
 }
 
 pub struct Not<F>(F);
+
 impl<F: Default> Default for Not<F> {
     fn default() -> Self {
         Not(F::default())
     }
 }
+
 impl<F: Debug> Debug for Not<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Not")
@@ -193,16 +211,19 @@ impl<F: Debug> Debug for Not<F> {
             .finish()
     }
 }
+
 impl<F: PartialEq> PartialEq for Not<F> {
     fn eq(&self, other: &Self) -> bool {
         self.0.eq(&other.0)
     }
 }
+
 impl<F: Clone> Clone for Not<F> {
     fn clone(&self) -> Self {
         Not(self.0.clone())
     }
 }
+
 impl<F> Not<F> {
     pub fn new(filter: F) -> Self {
         Self(filter)
@@ -212,6 +233,7 @@ impl<F> Not<F> {
         &self.0
     }
 }
+
 impl<F: Filter> Filter for Not<F> {
     fn keep(&self, entry: &Entry) -> bool {
         self.0.discard(entry)
