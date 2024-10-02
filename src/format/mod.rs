@@ -1,5 +1,8 @@
 mod grid;
+mod tree;
+
 pub use grid::Grid;
+pub use tree::Tree;
 
 use std::io::Write;
 

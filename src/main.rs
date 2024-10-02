@@ -112,6 +112,9 @@ fn main() {
     if matches.get_flag("grid") {
         xf::format::Grid::new(file_system)
             .print(colorizer).unwrap();
+    } else if matches.get_flag("recursive") {
+        xf::format::Tree::new(file_system)
+            .print(colorizer).unwrap();
     } else {
         xf::format::List::new(file_system)
             .print(colorizer).unwrap();

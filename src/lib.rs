@@ -121,10 +121,29 @@ impl TryFrom<DirEntry> for Entry {
 
         Ok(Self {
             entry_type,
-            permissions: Perms::try_from(&value)?,
+            permissions: Perms::try_from(value.path().as_path())?,
             //permissions: Perms::default(),
             meta: value.metadata().unwrap(),
             path: value.path().to_path_buf(),
+        })
+    }
+}
+
+impl TryFrom<&Path> for Entry {
+    type Error = Box<dyn std::error::Error>;
+    fn try_from(value: &Path) -> Result<Self, Self::Error> {
+        let entry_type = if value.is_dir() {
+            EntryType::Dir
+        } else {
+            EntryType::File
+        };
+
+        Ok(Self {
+            entry_type,
+            permissions: Perms::try_from(value)?,
+            //permissions: Perms::default(),
+            meta: value.metadata().unwrap(),
+            path: value.to_path_buf(),
         })
     }
 }

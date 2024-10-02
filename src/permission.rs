@@ -1,4 +1,4 @@
-use std::{fs::DirEntry, path::PathBuf};
+use std::path::Path;
 
 use crate::style::ModeChar;
 
@@ -12,8 +12,8 @@ pub struct Attributes {
     pub executable: bool
 }
 
-impl From<PathBuf> for Attributes {
-    fn from(value: PathBuf) -> Self {
+impl From<&Path> for Attributes {
+    fn from(value: &Path) -> Self {
         #[cfg(target_os = "windows")]
         return {
             use std::os::windows::ffi::OsStrExt;
@@ -89,9 +89,9 @@ impl std::fmt::Display for Perms {
     }
 }
 
-impl TryFrom<&DirEntry> for Perms {
+impl TryFrom<&Path> for Perms {
     type Error = Box<dyn std::error::Error>;
-    fn try_from(value: &DirEntry) -> Result<Self, Self::Error> {
+    fn try_from(value: &Path) -> Result<Self, Self::Error> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             use std::os::unix::fs::{PermissionsExt, MetadataExt};
@@ -115,12 +115,12 @@ impl TryFrom<&DirEntry> for Perms {
 
         #[cfg(target_os = "windows")]
         unsafe {
-            let (user, admin, everyone) = win32::get_file_perms(value.path())?;
+            let (user, admin, everyone) = win32::get_file_perms(value)?;
             Ok(Self {
                 user,
                 group: admin,
                 everyone,
-                attributes: Attributes::from(value.path()),
+                attributes: Attributes::from(value),
             })
         }
     }
