@@ -3,21 +3,21 @@ pub use grid::Grid;
 
 use std::io::Write;
 
-use crate::{filter::Filter, sort::SortStrategy, style::Colorizer, FileSystem};
+use crate::{style::Colorizer, FileSystem};
 
 pub trait Formatter {
     fn print(&mut self, colorizer: Colorizer) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-pub struct List<S, F>(FileSystem<S, F>);
+pub struct List(FileSystem);
 
-impl<S, F> List<S, F> {
-    pub fn new(file_system: FileSystem<S, F>) -> Self {
+impl List {
+    pub fn new(file_system: FileSystem) -> Self {
         Self(file_system)
     }
 }
 
-impl<S: SortStrategy, F: Filter> Formatter for List<S, F> {
+impl Formatter for List {
     fn print(&mut self, colorizer: Colorizer) -> Result<(), Box<dyn std::error::Error>> {
         let mut stdout = std::io::stdout();
         for entry in self.0.entries()? {

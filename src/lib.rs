@@ -4,7 +4,7 @@ pub mod sort;
 pub mod filter;
 pub mod permission;
 
-use std::{cmp::Ordering, fs::{self, DirEntry, Metadata}, io, path::{Path, PathBuf}};
+use std::{cmp::Ordering, fs::{self, DirEntry, Metadata}, io, path::{Path, PathBuf}, rc::Rc};
 
 use filter::{Filter, Not};
 use permission::Perms;
@@ -77,7 +77,7 @@ impl Entry {
 }
 
 impl Entry {
-    pub fn entries<F: Filter, S: SortStrategy>(&self, parent: &FileSystem<S, F>) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
+    pub fn entries(&self, parent: &FileSystem) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
         if !self.is_dir() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Entry is not a directory").into());
         }
@@ -145,13 +145,13 @@ impl<A: AsRef<str>> NormalizeCanonicalize for A {
 }
 
 /// Main logic for transforming, sorting, and filtering file entries
-pub struct FileSystem<S = (), F = Not<Hidden>> {
+pub struct FileSystem {
     path: PathBuf,
-    filters: F,
-    sorter: S,
+    filters: Rc<dyn Filter>,
+    sorter: Rc<dyn SortStrategy>,
 }
 
-impl<S, F> std::fmt::Debug for FileSystem<S, F> {
+impl std::fmt::Debug for FileSystem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("XF")
             .field("path", &self.path)
@@ -159,41 +159,51 @@ impl<S, F> std::fmt::Debug for FileSystem<S, F> {
     } 
 }
 
+impl Clone for FileSystem {
+    fn clone(&self) -> Self {
+        FileSystem {
+            path: self.path.clone(),
+            filters: self.filters.clone(),
+            sorter: self.sorter.clone(),
+        }
+    }
+}
+
 impl Default for FileSystem {
     fn default() -> Self {
         let path = std::env::current_dir().unwrap().display().to_string();
         Self {
             path: path.normalize_and_canonicalize().expect("Could not find the path specified"),
-            filters: Not::<Hidden>::default(),
-            sorter: (),
+            filters: Rc::new(Not::<Hidden>::default()),
+            sorter: Rc::new(()),
         }
     }
 }
 
 impl FileSystem {
-    pub fn new<P: AsRef<Path>, S, F>(path: P, sorter: S, filters: F) -> FileSystem<S, F> {
+    pub fn new<P: AsRef<Path>, S: SortStrategy + 'static, F: Filter + 'static>(path: P, sorter: S, filters: F) -> FileSystem {
         let path = path.as_ref().display().to_string();
         FileSystem {
             path:  path.normalize_and_canonicalize().expect("Could not find the path specified"),
-            filters,
-            sorter,
+            filters: Rc::new(filters),
+            sorter: Rc::new(sorter),
         }
     }
 }
 
-impl<S, F> FileSystem<S, F> {
-    pub fn with_sorter<S2>(self, sorter: S2) -> FileSystem<S2, F> {
+impl FileSystem {
+    pub fn with_sorter<S: SortStrategy + 'static>(self, sorter: S) -> FileSystem {
         FileSystem {
             path: self.path,
             filters: self.filters,
-            sorter,
+            sorter: Rc::new(sorter),
         }
     }
 
-    pub fn with_filter<F2>(self, filters: F2) -> FileSystem<S, F2> {
+    pub fn with_filter<F: Filter + 'static>(self, filters: F) -> FileSystem {
         FileSystem {
             path: self.path,
-            filters,
+            filters: Rc::new(filters),
             sorter: self.sorter,
         }
     }
@@ -204,13 +214,13 @@ impl<P: AsRef<Path>> From<P> for FileSystem {
         let value = value.as_ref().display().to_string();
         FileSystem {
             path:  value.normalize_and_canonicalize().expect("Could not find the path specified"),
-            filters: Not::<Hidden>::default(),
-            sorter: (),
+            filters: Rc::new(Not::<Hidden>::default()),
+            sorter: Rc::new(()),
         }
     }
 }
 
-impl<S: SortStrategy, F: Filter> FileSystem<S, F> {
+impl FileSystem {
     pub fn entries(&self) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
         let mut entries = fs::read_dir(&self.path)?
             .filter_map(|v| match v {
@@ -237,6 +247,12 @@ impl Default for Directory {
         Self(Natural)
     }
 }
+impl<T: Clone> Clone for Directory<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())        
+    }
+}
+
 impl<T: SortStrategy> SortStrategy for Directory<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         match (first.entry_type, second.entry_type) {
@@ -249,13 +265,8 @@ impl<T: SortStrategy> SortStrategy for Directory<T> {
     }
 }
 impl Filter for Directory {
-    type Not = Not<Self>;
     fn keep(&self, entry: &Entry) -> bool {
         entry.is_dir()
-    }
-
-    fn not(self) -> Self::Not {
-       Not::new(self) 
     }
 }
 
@@ -264,6 +275,11 @@ pub struct Hidden<T = Natural>(T);
 impl<T: Default> Default for Hidden<T> {
     fn default() -> Self {
         Self(T::default())
+    }
+}
+impl<T: Clone> Clone for Hidden<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
     }
 }
 impl<T: PartialEq> PartialEq for Hidden<T> {
@@ -281,13 +297,7 @@ impl<T: SortStrategy> SortStrategy for Hidden<T> {
     }
 }
 impl Filter for Hidden {
-    type Not = Not<Self>;
-
     fn keep(&self, entry: &Entry) -> bool {
         entry.is_hidden()
-    }
-
-    fn not(self) -> Self::Not {
-        Not::new(self)
     }
 }

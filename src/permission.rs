@@ -16,6 +16,7 @@ impl From<PathBuf> for Attributes {
     fn from(value: PathBuf) -> Self {
         #[cfg(target_os = "windows")]
         return {
+            use std::os::windows::ffi::OsStrExt;
             use windows::core::PCWSTR;
             use windows::Win32::Storage::FileSystem::{
                 GetBinaryTypeW, GetFileAttributesW, FILE_ATTRIBUTE_ARCHIVE,

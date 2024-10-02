@@ -3,38 +3,46 @@ use std::fmt::Debug;
 use crate::Entry;
 
 pub trait Filter
-where Self: Sized
 {
-    type Not: Filter;
-
     fn keep(&self, entry: &Entry) -> bool;
 
     #[inline]
     fn discard(&self, entry: &Entry) -> bool {
         !self.keep(entry)
     }
+}
 
-    fn and<B>(self, other: B) -> And<Self, B> {
-        And::new(self, other)
-    }
+pub trait Binary
+where
+    Self: Sized
+{
+    type Not: Filter;
 
-    fn or<B>(self, other: B) -> Or<Self, B> {
-        Or::new(self, other)
-    }
-
+    fn and<B>(self, other: B) -> And<Self, B>;
+    fn or<B>(self, other: B) -> Or<Self, B>;
     fn not(self) -> Self::Not;
 }
 
-impl Filter for () {
+impl<F: Filter> Binary for F {
     type Not = Not<Self>;
 
-    #[inline]
-    fn keep(&self, _entry: &Entry) -> bool {
-        true
+    fn and<B>(self, other: B) -> And<Self, B> {
+        And(self, other)
+    }
+
+    fn or<B>(self, other: B) -> Or<Self, B> {
+        Or(self, other)
     }
 
     fn not(self) -> Self::Not {
-        Not::new(self)
+        Not(self)
+    }
+}
+
+impl Filter for () {
+    #[inline]
+    fn keep(&self, _entry: &Entry) -> bool {
+        true
     }
 }
 
@@ -58,30 +66,18 @@ impl Extensions {
     }
 }
 impl Filter for Extensions {
-    type Not = Not<Self>;
-
     #[inline]
     fn keep(&self, entry: &Entry) -> bool {
         let ext = entry.extension().map(|v| if self.case_sensitive { v } else { v.to_ascii_lowercase() }).unwrap_or_default();
         self.extensions.contains(&ext)
-    }
-
-    fn not(self) -> Self::Not {
-        Not::new(self)
     }
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Dot;
 impl Filter for Dot {
-    type Not = Not<Self>;
-
     fn keep(&self, entry: &Entry) -> bool {
         entry.is_dot() 
-    }
-
-    fn not(self) -> Self::Not {
-        Not::new(self)
     }
 }
 
@@ -93,14 +89,8 @@ impl Match {
     }
 }
 impl Filter for Match {
-    type Not = Not<Self>;
-
     fn keep(&self, entry: &Entry) -> bool {
         self.0.is_match(entry.file_name()) 
-    }
-
-    fn not(self) -> Self::Not {
-        Not::new(self)
     }
 }
 
@@ -142,14 +132,8 @@ impl<A, B> And<A, B> {
     }
 }
 impl<A: Filter, B: Filter> Filter for And<A, B> {
-    type Not = Not<Self>;
-
     fn keep(&self, entry: &Entry) -> bool {
         self.0.keep(entry) && self.1.keep(entry)
-    }
-
-    fn not(self) -> Self::Not {
-        Not::new(self)
     }
 }
 
@@ -191,14 +175,8 @@ impl<A, B> Or<A, B> {
     }
 }
 impl<A: Filter, B: Filter> Filter for Or<A, B> {
-    type Not = Not<Self>;
-
     fn keep(&self, entry: &Entry) -> bool {
         self.0.keep(entry) || self.1.keep(entry)
-    }
-
-    fn not(self) -> Self::Not {
-        Not::new(self) 
     }
 }
 
@@ -235,13 +213,7 @@ impl<F> Not<F> {
     }
 }
 impl<F: Filter> Filter for Not<F> {
-    type Not = F;
-
     fn keep(&self, entry: &Entry) -> bool {
         self.0.discard(entry)
-    }
-
-    fn not(self) -> Self::Not {
-        self.0
     }
 }

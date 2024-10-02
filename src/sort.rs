@@ -234,7 +234,7 @@ impl<T: SortStrategy> SortStrategy for Date<T> {
         match (f, s) {
             (Some(_), None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,
-            (Some(f), Some(s)) => f.date().cmp(&s.date()),
+            (Some(f), Some(s)) => f.date_naive().cmp(&s.date_naive()),
             (None, None) => self.0.compare(first, second)
         }
     }

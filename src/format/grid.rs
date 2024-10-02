@@ -1,19 +1,18 @@
-use owo_colors::OwoColorize;
 use terminal_size::{terminal_size, Width};
 
-use crate::{filter::Filter, sort::SortStrategy, style::{Colorizer, Spacer}, FileSystem};
+use crate::{style::{Colorizer, Spacer}, FileSystem};
 
 use super::Formatter;
 
-pub struct Grid<S, F>(FileSystem<S, F>);
+pub struct Grid(FileSystem);
 
-impl<S, F> Grid<S, F> {
-    pub fn new(file_system: FileSystem<S, F>) -> Self {
+impl Grid {
+    pub fn new(file_system: FileSystem) -> Self {
         Self(file_system)
     }
 }
 
-impl<S: SortStrategy, F: Filter> Formatter for Grid<S, F> {
+impl Formatter for Grid {
     fn print(&mut self, colorizer: Colorizer) -> Result<(), Box<dyn std::error::Error>> {
         let (Width(width), _) = terminal_size().unwrap();
         let width = width as usize;
