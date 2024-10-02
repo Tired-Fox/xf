@@ -1,3 +1,5 @@
+mod ignore;
+
 pub mod format;
 pub mod style;
 pub mod sort;
