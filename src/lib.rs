@@ -1,12 +1,18 @@
 mod ignore;
 
-pub mod format;
-pub mod style;
-pub mod sort;
 pub mod filter;
+pub mod format;
 pub mod permission;
+pub mod sort;
+pub mod style;
 
-use std::{cmp::Ordering, fs::{self, DirEntry, Metadata}, io, path::{Path, PathBuf}, rc::Rc};
+use std::{
+    cmp::Ordering,
+    fs::{self, DirEntry, Metadata},
+    io,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 use filter::{Filter, Not};
 use permission::Perms;
@@ -48,7 +54,10 @@ impl Entry {
     }
 
     pub fn file_name(&self) -> &str {
-        self.path().file_name().and_then(|v| v.to_str()).unwrap_or("")
+        self.path()
+            .file_name()
+            .and_then(|v| v.to_str())
+            .unwrap_or("")
     }
 
     pub fn extension(&self) -> Option<String> {
@@ -81,7 +90,9 @@ impl Entry {
 impl Entry {
     pub fn entries(&self, parent: &FileSystem) -> Result<Vec<Entry>, Box<dyn std::error::Error>> {
         if !self.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Entry is not a directory").into());
+            return Err(
+                io::Error::new(io::ErrorKind::InvalidInput, "Entry is not a directory").into(),
+            );
         }
 
         let mut entries = fs::read_dir(&self.path)?
@@ -90,8 +101,8 @@ impl Entry {
                     // PERF: Handle error
                     let entry = Entry::try_from(v).ok()?;
                     parent.filters.keep(&entry).then_some(entry)
-                },
-                _ => None
+                }
+                _ => None,
             })
             .collect::<Vec<_>>();
 
@@ -106,7 +117,7 @@ impl PartialEq for Entry {
         match (self.entry_type, other.entry_type) {
             (EntryType::File, EntryType::File) => self.path() == other.path(),
             (EntryType::Dir, EntryType::Dir) => self.path() == other.path(),
-            _ => false
+            _ => false,
         }
     }
 }
@@ -159,7 +170,10 @@ impl<A: AsRef<str>> NormalizeCanonicalize for A {
     fn normalize_and_canonicalize(&self) -> Result<PathBuf, std::io::Error> {
         let mut path = self.as_ref().to_string();
         if path.starts_with('~') {
-            path.replace_range(..1, dirs::home_dir().unwrap().display().to_string().as_str());
+            path.replace_range(
+                ..1,
+                dirs::home_dir().unwrap().display().to_string().as_str(),
+            );
         }
         dunce::canonicalize(path)
     }
@@ -174,10 +188,8 @@ pub struct FileSystem {
 
 impl std::fmt::Debug for FileSystem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("XF")
-            .field("path", &self.path)
-            .finish()
-    } 
+        f.debug_struct("XF").field("path", &self.path).finish()
+    }
 }
 
 impl Clone for FileSystem {
@@ -194,7 +206,9 @@ impl Default for FileSystem {
     fn default() -> Self {
         let path = std::env::current_dir().unwrap().display().to_string();
         Self {
-            path: path.normalize_and_canonicalize().expect("Could not find the path specified"),
+            path: path
+                .normalize_and_canonicalize()
+                .expect("Could not find the path specified"),
             filters: Rc::new(Not::<Hidden>::default()),
             sorter: Rc::new(()),
         }
@@ -202,10 +216,16 @@ impl Default for FileSystem {
 }
 
 impl FileSystem {
-    pub fn new<P: AsRef<Path>, S: SortStrategy + 'static, F: Filter + 'static>(path: P, sorter: S, filters: F) -> FileSystem {
+    pub fn new<P: AsRef<Path>, S: SortStrategy + 'static, F: Filter + 'static>(
+        path: P,
+        sorter: S,
+        filters: F,
+    ) -> FileSystem {
         let path = path.as_ref().display().to_string();
         FileSystem {
-            path:  path.normalize_and_canonicalize().expect("Could not find the path specified"),
+            path: path
+                .normalize_and_canonicalize()
+                .expect("Could not find the path specified"),
             filters: Rc::new(filters),
             sorter: Rc::new(sorter),
         }
@@ -242,7 +262,9 @@ impl<P: AsRef<Path>> From<P> for FileSystem {
     fn from(value: P) -> Self {
         let value = value.as_ref().display().to_string();
         FileSystem {
-            path:  value.normalize_and_canonicalize().expect("Could not find the path specified"),
+            path: value
+                .normalize_and_canonicalize()
+                .expect("Could not find the path specified"),
             filters: Rc::new(Not::<Hidden>::default()),
             sorter: Rc::new(()),
         }
@@ -257,8 +279,8 @@ impl FileSystem {
                     // PERF: Handle error
                     let entry = Entry::try_from(v).ok()?;
                     self.filters.keep(&entry).then_some(entry)
-                },
-                _ => None
+                }
+                _ => None,
             })
             .collect::<Vec<_>>();
 
@@ -267,7 +289,6 @@ impl FileSystem {
         Ok(entries)
     }
 }
-
 
 /// A sorter that will sort directories first
 pub struct Directory<T = Natural>(pub T);
@@ -279,7 +300,7 @@ impl Default for Directory {
 
 impl<T: Clone> Clone for Directory<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())        
+        Self(self.0.clone())
     }
 }
 
@@ -288,9 +309,7 @@ impl<T: SortStrategy> SortStrategy for Directory<T> {
         match (first.entry_type, second.entry_type) {
             (EntryType::Dir, EntryType::File) => Ordering::Less,
             (EntryType::File, EntryType::Dir) => Ordering::Greater,
-            _ => {
-                self.0.compare(first, second)
-            }
+            _ => self.0.compare(first, second),
         }
     }
 }
@@ -325,7 +344,7 @@ impl<T: SortStrategy> SortStrategy for Hidden<T> {
         match (first.is_hidden(), second.is_hidden()) {
             (true, false) => Ordering::Less,
             (false, true) => Ordering::Greater,
-            _ => self.0.compare(first, second)
+            _ => self.0.compare(first, second),
         }
     }
 }

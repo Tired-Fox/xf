@@ -1,4 +1,7 @@
-use std::{path::{Path, PathBuf}, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use regex::Regex;
 
@@ -37,7 +40,7 @@ impl TryFrom<PathBuf> for GitIgnore {
     type Error = String;
 
     fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
-        let content = std::fs::read_to_string(value).map_err(|e| e.to_string())?;    
+        let content = std::fs::read_to_string(value).map_err(|e| e.to_string())?;
         Self::from_str(content.as_str())
     }
 }
@@ -54,7 +57,9 @@ impl FromStr for GitIgnore {
             if line.is_empty() || line.starts_with("#") {
                 continue;
             } else if line.starts_with("!") {
-                ignore.include.push(PathBuf::from(line.strip_prefix('!').unwrap()));
+                ignore
+                    .include
+                    .push(PathBuf::from(line.strip_prefix('!').unwrap()));
             } else {
                 line = line
                     .replace(".", "\\.")
@@ -71,7 +76,7 @@ impl FromStr for GitIgnore {
 
                 ignore.exclude.push(
                     Regex::new(format!("^{}$", line.as_str()).as_str())
-                    .map_err(|e| e.to_string())?
+                        .map_err(|e| e.to_string())?,
                 )
             }
         }
@@ -113,13 +118,16 @@ mod test {
 
     #[test]
     fn should_include() {
-        let ignore = GitIgnore::from_str("
+        let ignore = GitIgnore::from_str(
+            "
 **/test.rs
 *.zip
 # comment
 tests/**/*.log
 !examples/test.rs
-").unwrap();
+",
+        )
+        .unwrap();
 
         assert!(ignore.include("examples/test.rs"));
         assert!(!ignore.include("compressed.zip"));

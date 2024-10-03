@@ -23,9 +23,7 @@ impl Tree {
             .filter(|e| {
                 ignore
                     .as_ref()
-                    .map(|v| {
-                        v.include(e.path().strip_prefix(&self.0.path).unwrap())
-                    })
+                    .map(|v| v.include(e.path().strip_prefix(&self.0.path).unwrap()))
                     .unwrap_or(true)
             })
         {
@@ -46,7 +44,8 @@ impl Tree {
                 let gitignore = match entry.path.join(".gitignore").exists() {
                     true => Some(GitIgnore::try_from(entry.path.join(".gitignore"))?),
                     false => None,
-                }.or_else(|| ignore.clone());
+                }
+                .or_else(|| ignore.clone());
                 self.print_all(&rec, gitignore, format!("{indent}│ "), colorizer)?;
             } else {
                 println!("{permissions}{indent}├ {}", colorizer.file(entry));

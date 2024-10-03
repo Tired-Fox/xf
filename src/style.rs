@@ -9,7 +9,7 @@ use crate::{permission::AccessRights, Entry};
 pub struct GroupStyle {
     matcher_map: HashMap<&'static str, usize>,
     matchers: Vec<GroupMatch>,
-    style: Style
+    style: Style,
 }
 
 impl GroupStyle {
@@ -18,10 +18,11 @@ impl GroupStyle {
             match (&mut self.matchers[*index], matcher) {
                 (GroupMatch::Filename(curr), GroupMatch::Filename(new)) => curr.extend(new),
                 (GroupMatch::Extension(curr), GroupMatch::Extension(new)) => curr.extend(new),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         } else {
-            self.matcher_map.insert(matcher.as_ref(), self.matchers.len());
+            self.matcher_map
+                .insert(matcher.as_ref(), self.matchers.len());
             self.matchers.push(matcher);
         }
     }
@@ -38,7 +39,7 @@ impl GroupStyle {
     pub fn style(&self) -> Style {
         self.style
     }
-} 
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, strum_macros::EnumIs)]
 pub enum GroupMatch {
@@ -52,12 +53,22 @@ pub enum GroupMatch {
 }
 
 impl GroupMatch {
-    pub fn filenames<I: IntoIterator<Item=S>, S: AsRef<str>>(filenames: I) -> Self {
-        Self::Filename(filenames.into_iter().map(|v| v.as_ref().to_string()).collect())
+    pub fn filenames<I: IntoIterator<Item = S>, S: AsRef<str>>(filenames: I) -> Self {
+        Self::Filename(
+            filenames
+                .into_iter()
+                .map(|v| v.as_ref().to_string())
+                .collect(),
+        )
     }
 
-    pub fn extensions<I: IntoIterator<Item=S>, S: AsRef<str>>(extensions: I) -> Self {
-        Self::Extension(extensions.into_iter().map(|v| v.as_ref().to_ascii_lowercase()).collect())
+    pub fn extensions<I: IntoIterator<Item = S>, S: AsRef<str>>(extensions: I) -> Self {
+        Self::Extension(
+            extensions
+                .into_iter()
+                .map(|v| v.as_ref().to_ascii_lowercase())
+                .collect(),
+        )
     }
 
     pub fn starts_with<S: ToString>(pattern: S) -> Self {
@@ -76,7 +87,7 @@ impl GroupMatch {
             Self::Hidden => "Hidden",
             Self::Executable => "Executable",
             Self::StartsWith(_) => "StartsWith",
-            Self::EndsWith(_) => "EndsWith"
+            Self::EndsWith(_) => "EndsWith",
         }
     }
 
@@ -96,12 +107,18 @@ impl GroupMatch {
 #[derive(Default)]
 pub struct Colorizer {
     groups: HashMap<String, usize>,
-    group_styles: Vec<GroupStyle>
+    group_styles: Vec<GroupStyle>,
 }
 
 impl Colorizer {
-    pub fn group<S: AsRef<str>, I: IntoIterator<Item=GroupMatch>>(mut self, name: S, matchers: I, style: Style) -> Self {
-        self.groups.insert(name.as_ref().to_string(), self.group_styles.len());
+    pub fn group<S: AsRef<str>, I: IntoIterator<Item = GroupMatch>>(
+        mut self,
+        name: S,
+        matchers: I,
+        style: Style,
+    ) -> Self {
+        self.groups
+            .insert(name.as_ref().to_string(), self.group_styles.len());
 
         // compress and optimize matchers
         let mut m = HashMap::<&str, GroupMatch>::new();
@@ -110,7 +127,7 @@ impl Colorizer {
                 match (m.get_mut(matcher.as_ref()).unwrap(), matcher) {
                     (GroupMatch::Filename(curr), GroupMatch::Filename(new)) => curr.extend(new),
                     (GroupMatch::Extension(curr), GroupMatch::Extension(new)) => curr.extend(new),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             } else {
                 m.insert(matcher.as_ref(), matcher);
@@ -121,7 +138,7 @@ impl Colorizer {
         self.group_styles.push(GroupStyle {
             matcher_map: m.iter().enumerate().map(|(i, (k, _))| (*k, i)).collect(),
             matchers: m.into_iter().map(|(_, v)| v).collect(),
-            style
+            style,
         });
         self
     }
@@ -145,11 +162,18 @@ pub fn humansize(value: u64) -> String {
         // Megabytes
         1_048_576..1_073_741_824 => format!("{}M", (value as f32 / 1_048_576.0).round() as u8),
         // Gigbytes
-        1_073_741_824..1_099_511_627_776 => format!("{}G", (value as f32 / 1_099_511_627_776.0).round() as u8),
+        1_073_741_824..1_099_511_627_776 => {
+            format!("{}G", (value as f32 / 1_099_511_627_776.0).round() as u8)
+        }
         // Terabytes
-        1_099_511_627_776..1_125_899_906_842_624 => format!("{}T", (value as f32 / 1_099_511_627_776.0).round() as u8),
+        1_099_511_627_776..1_125_899_906_842_624 => {
+            format!("{}T", (value as f32 / 1_099_511_627_776.0).round() as u8)
+        }
         // Petabytes
-        _ => format!("{}P", (value as f32 / 1_125_899_906_842_624.0).round() as u8)
+        _ => format!(
+            "{}P",
+            (value as f32 / 1_125_899_906_842_624.0).round() as u8
+        ),
     }
 }
 
@@ -199,7 +223,7 @@ impl Colorizer {
                 break;
             }
         }
-        
+
         entry.file_name().style(style).to_string()
     }
 
@@ -208,27 +232,58 @@ impl Colorizer {
             format!("   {}", '^'.fg::<Gray>())
         } else {
             let hs = humansize(entry.metadata().len());
-            format!("{}{}", (0..4usize.saturating_sub(hs.len())).spacer(), hs.fg::<Gray>())
+            format!(
+                "{}{}",
+                (0..4usize.saturating_sub(hs.len())).spacer(),
+                hs.fg::<Gray>()
+            )
         }
     }
 
     pub fn date_modified(&self, entry: &Entry) -> String {
-        let date = entry.metadata().modified().map(|m| {
-            let date = chrono::DateTime::<chrono::Local>::from(m);
-            if date.year() < chrono::Local::now().year() {
-                date.format("%e %b  %Y")
-            } else {
-                date.format("%e %b %H:%M")
-            }.to_string()
-        }).unwrap_or("-".to_string());
+        let date = entry
+            .metadata()
+            .modified()
+            .map(|m| {
+                let date = chrono::DateTime::<chrono::Local>::from(m);
+                if date.year() < chrono::Local::now().year() {
+                    date.format("%e %b  %Y")
+                } else {
+                    date.format("%e %b %H:%M")
+                }
+                .to_string()
+            })
+            .unwrap_or("-".to_string());
 
-        format!("{}{}", (0..12usize.saturating_sub(date.len())).spacer(), date.blue())
+        format!(
+            "{}{}",
+            (0..12usize.saturating_sub(date.len())).spacer(),
+            date.blue()
+        )
     }
 
     fn access_rights(&self, buffer: &mut String, rights: &AccessRights) {
-        buffer.push_str(rights.readable().mode_char_color('r', Style::default().yellow()).to_string().as_str());
-        buffer.push_str(rights.writable().mode_char_color('w', Style::default().red()).to_string().as_str());
-        buffer.push_str(rights.executable().mode_char_color('x', Style::default().green()).to_string().as_str());
+        buffer.push_str(
+            rights
+                .readable()
+                .mode_char_color('r', Style::default().yellow())
+                .to_string()
+                .as_str(),
+        );
+        buffer.push_str(
+            rights
+                .writable()
+                .mode_char_color('w', Style::default().red())
+                .to_string()
+                .as_str(),
+        );
+        buffer.push_str(
+            rights
+                .executable()
+                .mode_char_color('x', Style::default().green())
+                .to_string()
+                .as_str(),
+        );
     }
 
     fn file_type(&self, entry: &Entry) -> String {

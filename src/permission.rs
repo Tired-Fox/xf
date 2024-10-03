@@ -9,7 +9,7 @@ pub struct Attributes {
     pub hidden: bool,
     pub system: bool,
     #[cfg(target_os = "windows")]
-    pub executable: bool
+    pub executable: bool,
 }
 
 impl From<&Path> for Attributes {
@@ -19,9 +19,8 @@ impl From<&Path> for Attributes {
             use std::os::windows::ffi::OsStrExt;
             use windows::core::PCWSTR;
             use windows::Win32::Storage::FileSystem::{
-                GetBinaryTypeW, GetFileAttributesW, FILE_ATTRIBUTE_ARCHIVE,
-                FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_READONLY,
-                FILE_ATTRIBUTE_SYSTEM,
+                GetBinaryTypeW, GetFileAttributesW, FILE_ATTRIBUTE_ARCHIVE, FILE_ATTRIBUTE_HIDDEN,
+                FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM,
             };
 
             let path = value
@@ -35,7 +34,10 @@ impl From<&Path> for Attributes {
             let mut binary_type = 0u32;
 
             Self {
-                executable: unsafe { GetBinaryTypeW(PCWSTR::from_raw(path.as_ptr()), &mut binary_type as *mut _).is_ok() },
+                executable: unsafe {
+                    GetBinaryTypeW(PCWSTR::from_raw(path.as_ptr()), &mut binary_type as *mut _)
+                        .is_ok()
+                },
                 archivable: attrs & FILE_ATTRIBUTE_ARCHIVE.0 == FILE_ATTRIBUTE_ARCHIVE.0,
                 readonly: attrs & FILE_ATTRIBUTE_READONLY.0 == FILE_ATTRIBUTE_READONLY.0,
                 hidden: attrs & FILE_ATTRIBUTE_HIDDEN.0 == FILE_ATTRIBUTE_HIDDEN.0,
@@ -44,7 +46,7 @@ impl From<&Path> for Attributes {
         };
 
         #[cfg(any(target_os = "linux", target_os = "macos"))]
-        return Self::default()
+        return Self::default();
     }
 }
 
@@ -83,9 +85,7 @@ impl std::fmt::Display for Perms {
         write!(
             f,
             "{}{}{}",
-            self.user.permissions,
-            self.group.permissions,
-            self.everyone.permissions,
+            self.user.permissions, self.group.permissions, self.everyone.permissions,
         )
     }
 }
@@ -95,7 +95,7 @@ impl TryFrom<&Path> for Perms {
     fn try_from(value: &Path) -> Result<Self, Self::Error> {
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
-            use std::os::unix::fs::{PermissionsExt, MetadataExt};
+            use std::os::unix::fs::{MetadataExt, PermissionsExt};
             let meta = value.metadata().unwrap();
             let permissions = meta.permissions();
             let st_mode = permissions.mode();
@@ -105,10 +105,18 @@ impl TryFrom<&Path> for Perms {
             Ok(Self {
                 user: User {
                     domain: Default::default(),
-                    name: user.map(|usr| usr.name().to_string_lossy().to_string()).unwrap_or_default(),
-                    permissions: AccessRights(((st_mode & 0b111 << 6)>>6) as u8),
+                    name: user
+                        .map(|usr| usr.name().to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                    permissions: AccessRights(((st_mode & 0b111 << 6) >> 6) as u8),
                 },
-                group: Group::new("", group.map(|grp| grp.name().to_string_lossy().to_string()).unwrap_or_default(), AccessRights(((st_mode & 0b111 << 3)>>3) as u8)),
+                group: Group::new(
+                    "",
+                    group
+                        .map(|grp| grp.name().to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                    AccessRights(((st_mode & 0b111 << 3) >> 3) as u8),
+                ),
                 everyone: Group::new("", "Everyone", AccessRights((st_mode & 0b111) as u8)),
                 attributes: Attributes::default(),
             })
@@ -218,11 +226,7 @@ pub struct Group {
 }
 
 impl Group {
-    pub fn new<S: ToString, S2: ToString>(
-        domain: S,
-        name: S2,
-        permissions: AccessRights,
-    ) -> Self {
+    pub fn new<S: ToString, S2: ToString>(domain: S, name: S2, permissions: AccessRights) -> Self {
         Self {
             domain: domain.to_string(),
             name: name.to_string(),

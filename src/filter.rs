@@ -2,8 +2,7 @@ use std::fmt::Debug;
 
 use crate::Entry;
 
-pub trait Filter
-{
+pub trait Filter {
     fn keep(&self, entry: &Entry) -> bool;
 
     #[inline]
@@ -14,7 +13,7 @@ pub trait Filter
 
 pub trait Binary
 where
-    Self: Sized
+    Self: Sized,
 {
     type Not: Filter;
 
@@ -53,10 +52,10 @@ pub struct Extensions {
 }
 
 impl Extensions {
-    pub fn new<I: IntoIterator<Item=S>, S: ToString>(extensions: I) -> Self {
+    pub fn new<I: IntoIterator<Item = S>, S: ToString>(extensions: I) -> Self {
         Self {
             extensions: extensions.into_iter().map(|v| v.to_string()).collect(),
-            case_sensitive: false
+            case_sensitive: false,
         }
     }
 
@@ -69,7 +68,16 @@ impl Extensions {
 impl Filter for Extensions {
     #[inline]
     fn keep(&self, entry: &Entry) -> bool {
-        let ext = entry.extension().map(|v| if self.case_sensitive { v } else { v.to_ascii_lowercase() }).unwrap_or_default();
+        let ext = entry
+            .extension()
+            .map(|v| {
+                if self.case_sensitive {
+                    v
+                } else {
+                    v.to_ascii_lowercase()
+                }
+            })
+            .unwrap_or_default();
         self.extensions.contains(&ext)
     }
 }
@@ -79,7 +87,7 @@ pub struct Dot;
 
 impl Filter for Dot {
     fn keep(&self, entry: &Entry) -> bool {
-        entry.is_dot() 
+        entry.is_dot()
     }
 }
 
@@ -94,7 +102,7 @@ impl Match {
 
 impl Filter for Match {
     fn keep(&self, entry: &Entry) -> bool {
-        self.0.is_match(entry.file_name()) 
+        self.0.is_match(entry.file_name())
     }
 }
 
@@ -206,9 +214,7 @@ impl<F: Default> Default for Not<F> {
 
 impl<F: Debug> Debug for Not<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Not")
-            .field("filter", &self.0)
-            .finish()
+        f.debug_struct("Not").field("filter", &self.0).finish()
     }
 }
 

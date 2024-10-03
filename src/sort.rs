@@ -73,34 +73,34 @@ impl SortStrategy for Natural {
         // ab102c -> a b 102 c
         // ab20a -> a b 20 a
         let mut i = 0usize;
-        let mut j =  0usize;
+        let mut j = 0usize;
 
         let first = first.file_name();
         let second = second.file_name();
 
-        let _ = second[j..j+1];
+        let _ = second[j..j + 1];
         while i < first.len() && j < second.len() {
-            if first[i..i+1].is_ascii_digit() && second[j..j+1].is_ascii_digit() {
-                let u = i; 
+            if first[i..i + 1].is_ascii_digit() && second[j..j + 1].is_ascii_digit() {
+                let u = i;
                 let v = j;
-                while i < first.len() && first[i..i+1].is_ascii_digit() {
-                    i+=1;
+                while i < first.len() && first[i..i + 1].is_ascii_digit() {
+                    i += 1;
                 }
-                while j < second.len() && second[j..j+1].is_ascii_digit() {
-                    j+=1;
+                while j < second.len() && second[j..j + 1].is_ascii_digit() {
+                    j += 1;
                 }
 
                 let u = first[u..i].parse::<usize>().unwrap();
                 let v = second[v..j].parse::<usize>().unwrap();
 
                 match u.cmp(&v) {
-                    Ordering::Equal => {},
+                    Ordering::Equal => {}
                     other => return other,
                 }
             } else {
                 // If comparison is not equal return it immediatly
-                match first[i..i+1].cmp(&second[j..j+1]) {
-                    Ordering::Equal => {},
+                match first[i..i + 1].cmp(&second[j..j + 1]) {
+                    Ordering::Equal => {}
                     other => return other,
                 }
             }
@@ -111,7 +111,7 @@ impl SortStrategy for Natural {
         match (i < first.len(), j < second.len()) {
             (false, true) => Ordering::Less,
             (true, false) => Ordering::Greater,
-            _ => Ordering::Equal
+            _ => Ordering::Equal,
         }
     }
 }
@@ -170,11 +170,11 @@ impl<T: SortStrategy> SortStrategy for Extension<T> {
         match (first.extension(), second.extension()) {
             (Some(f), Some(s)) => match f.cmp(&s) {
                 Ordering::Equal => self.0.compare(first, second),
-                other => other
+                other => other,
             },
             (None, Some(_)) => Ordering::Less,
             (Some(_), None) => Ordering::Greater,
-            (None, None) => self.0.compare(first, second)
+            (None, None) => self.0.compare(first, second),
         }
     }
 }
@@ -190,16 +190,20 @@ where
     T2: SortStrategy + Matches,
 {
     fn get_group_index(entry: &Entry) -> Option<usize> {
-        if T1::matches(entry) { Some(0) }
-        else if T2::matches(entry) { Some(1) }
-        else { None }
+        if T1::matches(entry) {
+            Some(0)
+        } else if T2::matches(entry) {
+            Some(1)
+        } else {
+            None
+        }
     }
 
     fn compare_within_group(&self, index: usize, first: &Entry, second: &Entry) -> Ordering {
         match index {
             0 => self.0.compare(first, second),
             1 => self.1.compare(first, second),
-            _ => Ordering::Equal
+            _ => Ordering::Equal,
         }
     }
 }
@@ -224,12 +228,12 @@ impl<T: Grouping, D: SortStrategy> SortStrategy for Group<T, D> {
             },
             (None, Some(_)) => Ordering::Greater,
             (Some(_), None) => Ordering::Less,
-            (None, None) => self.1.compare(first, second)
+            (None, None) => self.1.compare(first, second),
         }
     }
 }
 
-pub struct Date<T=Natural>(pub T);
+pub struct Date<T = Natural>(pub T);
 
 impl Default for Date {
     fn default() -> Self {
@@ -240,18 +244,19 @@ impl Default for Date {
 impl<T: SortStrategy> SortStrategy for Date<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
-        let s: Option<chrono::DateTime<Local>> = second.metadata().modified().map(|t| t.into()).ok();
+        let s: Option<chrono::DateTime<Local>> =
+            second.metadata().modified().map(|t| t.into()).ok();
 
         match (f, s) {
             (Some(_), None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,
             (Some(f), Some(s)) => f.date_naive().cmp(&s.date_naive()),
-            (None, None) => self.0.compare(first, second)
+            (None, None) => self.0.compare(first, second),
         }
     }
 }
 
-pub struct Time<T=Natural>(pub T);
+pub struct Time<T = Natural>(pub T);
 
 impl Default for Time {
     fn default() -> Self {
@@ -262,18 +267,19 @@ impl Default for Time {
 impl<T: SortStrategy> SortStrategy for Time<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
-        let s: Option<chrono::DateTime<Local>> = second.metadata().modified().map(|t| t.into()).ok();
+        let s: Option<chrono::DateTime<Local>> =
+            second.metadata().modified().map(|t| t.into()).ok();
 
         match (f, s) {
             (Some(_), None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,
             (Some(f), Some(s)) => f.time().cmp(&s.time()),
-            (None, None) => self.0.compare(first, second)
+            (None, None) => self.0.compare(first, second),
         }
     }
 }
 
-pub struct DateTime<T=Natural>(pub T);
+pub struct DateTime<T = Natural>(pub T);
 
 impl Default for DateTime {
     fn default() -> Self {
@@ -284,18 +290,19 @@ impl Default for DateTime {
 impl<T: SortStrategy> SortStrategy for DateTime<T> {
     fn compare(&self, first: &Entry, second: &Entry) -> Ordering {
         let f: Option<chrono::DateTime<Local>> = first.metadata().modified().map(|t| t.into()).ok();
-        let s: Option<chrono::DateTime<Local>> = second.metadata().modified().map(|t| t.into()).ok();
+        let s: Option<chrono::DateTime<Local>> =
+            second.metadata().modified().map(|t| t.into()).ok();
 
         match (f, s) {
             (Some(_), None) => Ordering::Less,
             (None, Some(_)) => Ordering::Greater,
             (Some(f), Some(s)) => f.cmp(&s),
-            (None, None) => self.0.compare(first, second)
+            (None, None) => self.0.compare(first, second),
         }
     }
 }
 
-pub struct Reverse<T=Natural>(pub T);
+pub struct Reverse<T = Natural>(pub T);
 
 impl Default for Reverse {
     fn default() -> Self {
@@ -313,7 +320,7 @@ impl<T: SortStrategy> SortStrategy for Reverse<T> {
     }
 }
 
-pub struct Size<T=Natural>(pub T);
+pub struct Size<T = Natural>(pub T);
 
 impl Default for Size {
     fn default() -> Self {
